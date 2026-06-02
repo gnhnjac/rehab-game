@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 Smart Glove 3D Visualizer</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #11141a;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        #ui-container {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 10;
+            background: rgba(25, 28, 36, 0.85);
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid #2c323f;
+            color: #ffffff;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        }
+        button {
+            background-color: #007acc;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 14px;
+            font-weight: 600;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.2s;
+            width: 100%;
+        }
+        button:hover {
+            background-color: #0098ff;
+        }
+        #status {
+            margin-top: 10px;
+            font-size: 12px;
+            color: #a0aec0;
+        }
+        #data-display {
+            margin-top: 15px;
+            font-family: monospace;
+            font-size: 13px;
+            color: #4cd137;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+
+    <div id="ui-container">
+        <h3>Glove Visualizer</h3>
+        <button id="connect-btn">Connect to Glove</button>
+        <div id="status">Status: Disconnected</div>
+        <div id="data-display">T: -- | I: FAULT | M: -- | R: -- | P: --</div>
+    </div>
+
+    <script>
+        // --- 3D SCENE SETUP ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x11141a);
+
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 5, 15);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
+
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.target.set(0, 2, 0);
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(5, 10, 7);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
+
+        // --- HAND MODEL GENERATION ---
+        const handGroup = new THREE.Group();
+        scene.add(handGroup);
+
+        const handMaterial = new THREE.MeshStandardMaterial({ color: 0x2c3e50, roughness: 0.4 });
+        const brokenMaterial = new THREE.MeshStandardMaterial({ color: 0xff3333, roughness: 0.4 }); 
+
+        // Palm Mesh
+        const palmGeo = new THREE.BoxGeometry(3.8, 3.0, 0.6);
+        const palm = new THREE.Mesh(palmGeo, handMaterial);
+        palm.position.set(0, 1.5, 0);
+        handGroup.add(palm);
+
+        const fingerXOffsets = [0, -0.9, 0.1, 1.0, 1.8];
+        const phalanxLengths = [
+            [0.8, 0.7, 0.5], // Thumb
+            [1.0, 0.8, 0.6], // Index
+            [1.1, 0.9, 0.6], // Middle
+            [1.0, 0.8, 0.6], // Ring
+            [0.8, 0.6, 0.5]  // Pinky
+        ];
+
+        const fingers = [];
+
+        for (let i = 0; i < 5; i++) {
+            const fingerBase = new THREE.Group();
+            
+            if (i === 0) {
+                fingerBase.position.set(-2.1, 1.4, 0);
+                fingerBase.rotation.z = 0.5; 
+            } else {
+                fingerBase.position.set(fingerXOffsets[i], 3.0, 0);
+            }
+            
+            handGroup.add(fingerBase);
+
+            const activeMaterial = (i === 1) ? brokenMaterial : handMaterial;
+
+            // Joint Segment 1
+            const j1 = new THREE.Group();
+            const m1 = new THREE.Mesh(new THREE.BoxGeometry(0.35, phalanxLengths[i][0], 0.35), activeMaterial);
+            m1.position.y = phalanxLengths[i][0] / 2;
+            j1.add(m1);
+            fingerBase.add(j1);
+
+            // Joint Segment 2
+            const j2 = new THREE.Group();
+            j2.position.y = phalanxLengths[i][0];
+            const m2 = new THREE.Mesh(new THREE.BoxGeometry(0.32, phalanxLengths[i][1], 0.32), activeMaterial);
+            m2.position.y = phalanxLengths[i][1] / 2;
+            j2.add(m2);
+            j1.add(j2);
+
+            // Joint Segment 3
+            const j3 = new THREE.Group();
+            j3.position.y = phalanxLengths[i][1];
+            const m3 = new THREE.Mesh(new THREE.BoxGeometry(0.28, phalanxLengths[i][2], 0.28), activeMaterial);
+            m3.position.y = phalanxLengths[i][2] / 2;
+            j3.add(m3);
+            j2.add(j3);
+
+            fingers.push({ joint1: j1, joint2: j2, joint3: j3, isThumb: (i === 0) });
+        }
+
+        // --- WEB SERIAL INTERFACE ENGINE ---
+        const connectBtn = document.getElementById('connect-btn');
+        const statusDiv = document.getElementById('status');
+        const dataDisplay = document.getElementById('data-display');
+        
+        let port;
+        let reader;
+        let keepReading = true;
+
+        connectBtn.addEventListener('click', async () => {
+            if (port) {
+                keepReading = false;
+                reader.cancel();
+                statusDiv.innerText = "Status: Disconnected";
+                connectBtn.innerText = "Connect to Glove";
+                port = null;
+                return;
+            }
+
+            try {
+                port = await navigator.serial.requestPort();
+                await port.open({ baudRate: 115200 });
+                
+                statusDiv.innerText = "Status: Connected";
+                connectBtn.innerText = "Disconnect";
+                
+                const textDecoder = new TextDecoderStream();
+                const readableStreamClosed = port.readable.pipeTo(textDecoder.writable);
+                reader = textDecoder.readable.getReader();
+                
+                readSerialLoop(reader);
+            } catch (err) {
+                statusDiv.innerText = "Status: Connection Failed";
+                console.error(err);
+            }
+        });
+
+        async function readSerialLoop(streamReader) {
+            let buffer = "";
+            keepReading = true;
+            
+            while (keepReading) {
+                try {
+                    const { value, done } = await streamReader.read();
+                    if (done) break;
+                    
+                    buffer += value;
+                    let lines = buffer.split("\n");
+                    buffer = lines.pop(); 
+                    
+                    for (let line of lines) {
+                        processIncomingLine(line);
+                    }
+                } catch (error) {
+                    console.error("Read error: ", error);
+                    break;
+                }
+            }
+        }
+
+        function processIncomingLine(line) {
+            if (line.includes("Flex %:")) {
+                // Isolate the telemetry values payload string
+                const dataParts = line.split("Flex %:");
+                if (dataParts.length < 2) return;
+
+                // Tokenize by whitespace delimiter (\t or spaces)
+                const tokens = dataParts[1].trim().split(/\s+/);
+                
+                if (tokens.length >= 5) {
+                    // Explicit integer conversion based on output stream ordering
+                    const thumbVal  = parseInt(tokens[0]) || 0; // Index 0: Pin 25
+                    const middleVal  = parseInt(tokens[1]) || 0; // Index 1: Fault Placeholder
+                    const ringVal = parseInt(tokens[2]) || 0; // Index 2: Pin 33
+                    const pinkyVal   = parseInt(tokens[3]) || 0; // Index 3: Pin 32
+                    //const pinkyVal  = parseInt(tokens[4]) || 0; // Index 4: Pin 35
+
+                    dataDisplay.innerText = `T: ${thumbVal}% | I: FAULT | M: ${middleVal}% | R: ${ringVal}% | P: ${pinkyVal}%`;
+                    
+                    // Route directly to the corresponding finger model objects
+                    animateFingerFlex(0, thumbVal);   // Model Thumb Mesh
+                    animateFingerFlex(2, middleVal);  // Model Middle Mesh
+                    animateFingerFlex(3, ringVal);   // Model Ring Mesh
+                    animateFingerFlex(4, pinkyVal);   // Model Pinky Mesh
+                }
+            }
+        }
+
+        function animateFingerFlex(fingerIndex, targetPercentage) {
+            const finger = fingers[fingerIndex];
+            const scalarFraction = targetPercentage / 100.0;
+            const MaxRadianRotation = Math.PI / 2; 
+
+            if (finger.isThumb) {
+                finger.joint1.rotation.z = 0.5 - (scalarFraction * 0.7);
+                finger.joint1.rotation.x = scalarFraction * (MaxRadianRotation * 0.3);
+                finger.joint2.rotation.x = scalarFraction * (MaxRadianRotation * 0.5);
+                finger.joint3.rotation.x = scalarFraction * (MaxRadianRotation * 0.4);
+            } else {
+                finger.joint1.rotation.x = scalarFraction * MaxRadianRotation;
+                finger.joint2.rotation.x = scalarFraction * (MaxRadianRotation * 1.1);
+                finger.joint3.rotation.x = scalarFraction * (MaxRadianRotation * 0.9);
+            }
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        animate();
+    </script>
+</body>
+</html>
