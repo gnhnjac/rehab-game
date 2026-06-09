@@ -30,8 +30,8 @@ This plan implements the initial phase of the glove rehabilitation project: veri
 
 ### 1. Data Registry (Glove)
 The glove will maintain:
-- An array/list of registered boxes (storing MAC addresses and Box IDs).
-- A state map of where cubes are located (e.g., Box MAC -> Cube UID currently inside).
+- A box registry using `std::unordered_map<uint64_t, RegisteredBox>` where the MAC address is packed into a 64-bit key for fast, O(1) lookup.
+- A state map of where cubes are located (each registered box maps to the cube's UID currently inside).
 
 ### 2. Communication Packet
 
@@ -66,10 +66,13 @@ typedef struct {
 - Define ESP-NOW message structure.
 
 ### [NEW] [glove.ino](file:///c:/Users/gnhnj/Programming/rehab-game/ESP32/glove/glove.ino)
-- Initialize ESP-NOW.
-- Handle peer registration and acknowledge boxes.
-- Track cube placement (box MAC -> cube UID).
-- Calibrate and monitor 5 flex sensors + 1 FSR sensor, mapping raw input to 0-100%. Print values to Serial.
+- Main sketch file that handles the setup and main loop, calling functions from the modular helper headers.
+
+### [NEW] [glove_sensors.h](file:///c:/Users/gnhnj/Programming/rehab-game/ESP32/glove/glove_sensors.h)
+- Implements calibration and filtered reading of the 5 flex sensors and 1 FSR force sensor.
+
+### [NEW] [glove_espnow.h](file:///c:/Users/gnhnj/Programming/rehab-game/ESP32/glove/glove_espnow.h)
+- Implements the ESP-NOW server, dynamic box registration, and packet parsing using a `std::unordered_map` lookup by MAC address.
 
 ### [NEW] [smart_box.ino](file:///c:/Users/gnhnj/Programming/rehab-game/ESP32/smart_box/smart_box.ino)
 - Scan for NFC tags using PN532.
