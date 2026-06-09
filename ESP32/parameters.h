@@ -1,3 +1,4 @@
+#pragma once
 //user defined parameters
 
 // OLED display width and height, in pixels
@@ -33,7 +34,7 @@
 #define FLEX_PIN_3 35
 #define FLEX_PIN_4 34
 #define FLEX_PIN_5 36
-#define FORCE_PIN 39 // Analog pin for FSR sensor (using Sensor VN pin)
+#define FORCE_PIN 2 // Analog pin for FSR sensor (using Sensor VN pin)
 #define CALIBRATION_BUTTON_PIN 4
 
 // --- ESP-NOW PROTOCOL DEFINITIONS ---
