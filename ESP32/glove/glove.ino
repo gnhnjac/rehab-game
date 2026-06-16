@@ -8,6 +8,7 @@ bool hapticEnabled = false;
 
 #include "glove_haptic.h"
 #include "glove_sensors.h"
+#include "glove_firebase.h"
 #include "glove_espnow.h"
 
 unsigned long lastPrintTime = 0;
@@ -21,6 +22,7 @@ void setup() {
     delay(1000);
     Serial.println("[Glove] Starting central server...");
 
+    setupWifi();
     setupSensors();
     setupHaptic();
     setupEspNow();
@@ -30,6 +32,12 @@ void setup() {
 }
 
 void loop() {
+    // Process any deferred Firebase BoxAction uploads from the ESP-NOW queue
+    BoxActionEvent pendingEvent;
+    if (popEvent(pendingEvent)) {
+        uploadBoxAction(pendingEvent.cubeId, pendingEvent.timestamp, pendingEvent.isPlaced, pendingEvent.boxIndex);
+    }
+
     // Periodically clean up timed-out boxes
     checkBoxTimeouts();
 
@@ -49,9 +57,11 @@ void loop() {
         if (millis() - lastPrintTime >= printInterval) {
             lastPrintTime = millis();
 
+            int flexRaw[NUM_FINGERS];
             int flexPercent[NUM_FINGERS];
+            int forceRaw = 0;
             int forcePercent = 0;
-            readMappedSensors(flexPercent, forcePercent);
+            readAllSensors(flexRaw, flexPercent, forceRaw, forcePercent);
 
             // 1. Print standard serial output for debugging
             Serial.print("Flex: [");
@@ -62,39 +72,16 @@ void loop() {
             Serial.printf("%%] | Force (FSR): %d%%\n", forcePercent);
             printRegistry();
 
-            // 2. Print JSON telemetry for local HTML dashboard
-            Serial.print("JSON:{\"flex\":[");
-            for (int i = 0; i < NUM_FINGERS; i++) {
-                Serial.print(flexPercent[i]);
-                if (i < NUM_FINGERS - 1) Serial.print(",");
-            }
-            Serial.printf("],\"force\":%d,\"calibrated\":true,\"boxes\":[", forcePercent);
-            
-            bool firstBox = true;
-            for (const auto& pair : boxRegistry) {
-                const RegisteredBox& box = pair.second;
-                if (!firstBox) Serial.print(",");
-                firstBox = false;
-                
-                Serial.print("{\"mac\":\"");
-                for (int j = 0; j < 6; j++) {
-                    Serial.printf("%02X", box.mac[j]);
-                    if (j < 5) Serial.print(":");
-                }
-                Serial.print("\",\"cube\":\"");
-                if (box.current_cube_len > 0) {
-                    for (int j = 0; j < box.current_cube_len; j++) {
-                        Serial.printf("%02X", box.current_cube_uid[j]);
-                    }
-                }
-                Serial.print("\"}");
-            }
-            Serial.println("]}");
+            // 2. Upload live data to Firebase
+            uploadLiveTelemetry(true, flexRaw, flexPercent, forceRaw, forcePercent);
         }
     } 
     else if (millis() - lastPrintTime >= printInterval) {
         lastPrintTime = millis();
-        Serial.println("JSON:{\"calibrated\":false}");
+        
+        // Upload uncalibrated state to Firebase
+        uploadLiveTelemetry(false, nullptr, nullptr, 0, 0);
+        
         Serial.println("[Glove] Awaiting sensor calibration. Press the button to begin.");
     }
 }

@@ -1,10 +1,41 @@
+// ignore_for_file: deprecated_member_use
+import 'dart:convert';
+import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_libserialport/flutter_libserialport.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'services/telemetry_provider.dart';
 import 'services/telemetry_service.dart';
 import 'models/glove_telemetry.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  FirebaseOptions? options;
+  try {
+    final configString = await rootBundle.loadString('assets/firebase_config.json');
+    final config = jsonDecode(configString);
+    if (config['apiKey'] != "YOUR_API_KEY") {
+      options = FirebaseOptions(
+        apiKey: config['apiKey'] ?? '',
+        authDomain: config['authDomain'] ?? '',
+        databaseURL: config['databaseURL'] ?? '',
+        projectId: config['projectId'] ?? '',
+        storageBucket: config['storageBucket'] ?? '',
+        messagingSenderId: config['messagingSenderId'] ?? '',
+        appId: config['appId'] ?? '',
+      );
+    }
+  } catch (e) {
+    debugPrint("Failed to load Firebase config from assets: $e");
+  }
+
+  if (options != null) {
+    try {
+      await Firebase.initializeApp(options: options);
+    } catch (e) {
+      debugPrint("Firebase init error: $e");
+    }
+  }
   runApp(const RehabGloveApp());
 }
 
@@ -47,19 +78,20 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  TelemetrySource _activeSource = TelemetrySource.serial;
-  String? _selectedPort;
-  List<String> _availablePorts = [];
   TelemetryService? _telemetryService;
+  bool _isConnected = false;
 
   final List<String> _consoleLogs = [];
   final ScrollController _consoleScrollController = ScrollController();
-  bool _isConsoleExpanded = false;
+  bool _isConsoleExpanded = true;
 
   @override
   void initState() {
     super.initState();
-    _scanPorts();
+    _consoleLogs.add('[System] Dashboard Ready.');
+    if (Firebase.apps.isEmpty) {
+      _consoleLogs.add('[Setup Instruction] Please configure `assets/firebase_config.json` with your Firebase credentials to enable live streaming.');
+    }
   }
 
   @override
@@ -69,54 +101,44 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.dispose();
   }
 
-  void _scanPorts() {
-    setState(() {
-      _availablePorts = SerialPort.availablePorts;
-      if (_availablePorts.isNotEmpty) {
-        // Default to first available COM port
-        _selectedPort = _availablePorts.contains(_selectedPort)
-            ? _selectedPort
-            : _availablePorts.first;
-      } else {
-        _selectedPort = null;
-      }
-    });
-  }
-
   void _cleanupService() {
     if (_telemetryService != null) {
       _telemetryService!.disconnect();
       _telemetryService = null;
     }
+    _isConnected = false;
   }
 
   void _toggleConnection() async {
-    if (_telemetryService != null && _telemetryService!.isConnected) {
+    if (_isConnected) {
       setState(() {
         _cleanupService();
-        _consoleLogs.add('[System] Disconnected.');
+        _consoleLogs.add('[System] Disconnected from Firebase.');
       });
       return;
     }
 
-    if (_activeSource == TelemetrySource.serial && _selectedPort == null) {
+    if (Firebase.apps.isEmpty) {
+      setState(() {
+        _consoleLogs.add('[Error] Firebase is not initialized. Please ensure `assets/firebase_config.json` exists with valid credentials.');
+      });
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a COM port first.')),
+        const SnackBar(
+          content: Text('Firebase configuration missing! See terminal log below.'),
+          backgroundColor: Colors.redAccent,
+        ),
       );
       return;
     }
 
     try {
       _cleanupService();
+      _telemetryService = TelemetryProvider.getService();
+
+      final dbUrl = Firebase.app().options.databaseURL ?? 'Default Database';
+      _consoleLogs.add('[System] Connecting to Firebase RTDB at $dbUrl...');
       
-      _telemetryService = TelemetryProvider.getService(
-        _activeSource,
-        serialPort: _selectedPort ?? 'COM3',
-      );
-
-      _consoleLogs.add('[System] Connecting to ${_activeSource == TelemetrySource.serial ? _selectedPort : "Firebase"}...');
-
-      // Listen to raw text logs
+      // Listen to service logs
       _telemetryService!.logStream.listen((log) {
         if (mounted) {
           setState(() {
@@ -130,17 +152,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
       await _telemetryService!.connect();
       
       setState(() {
-        _consoleLogs.add('[System] Connection established.');
+        _isConnected = true;
+        _consoleLogs.add('[System] Connection established. Listening to real-time events...');
       });
     } catch (e) {
       setState(() {
         _consoleLogs.add('[Error] Connection failed: $e');
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Connection failed: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Connection failed: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
       _cleanupService();
     }
+  }
+
+  String _getDatabaseUrl() {
+    if (Firebase.apps.isNotEmpty) {
+      return Firebase.app().options.databaseURL ?? "No Database URL Specified";
+    }
+    return "Configuration required in assets/firebase_config.json";
   }
 
   void _scrollConsoleToBottom() {
@@ -159,8 +194,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final bool isConnected = _telemetryService != null && _telemetryService!.isConnected;
-
     return Scaffold(
       appBar: AppBar(
         title: Row(
@@ -170,10 +203,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               height: 12,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: isConnected ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                color: _isConnected ? const Color(0xFF10B981) : const Color(0xFFEF4444),
                 boxShadow: [
                   BoxShadow(
-                    color: isConnected ? const Color(0xFF10B981).withOpacity(0.5) : const Color(0xFFEF4444).withOpacity(0.5),
+                    color: _isConnected ? const Color(0xFF10B981).withOpacity(0.5) : const Color(0xFFEF4444).withOpacity(0.5),
                     blurRadius: 8,
                     spreadRadius: 2,
                   )
@@ -193,22 +226,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         backgroundColor: const Color(0xFF141722),
         elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.blueAccent),
-            tooltip: 'Rescan Serial Ports',
-            onPressed: isConnected ? null : _scanPorts,
-          ),
-        ],
       ),
       body: Column(
         children: [
-          // Connection Control Panel
-          _buildConnectionPanel(isConnected),
+          // Connection Status Panel
+          _buildConnectionPanel(),
 
-          // Main Telemetry Body
+          // Main Content Grid
           Expanded(
-            child: isConnected
+            child: _isConnected
                 ? StreamBuilder<GloveTelemetry>(
                     stream: _telemetryService!.telemetryStream,
                     builder: (context, snapshot) {
@@ -227,7 +253,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             children: [
                               CircularProgressIndicator(),
                               SizedBox(height: 16),
-                              Text('Waiting for Glove data broadcast...'),
+                              Text('Waiting for Firebase broadcast...'),
                             ],
                           ),
                         );
@@ -241,7 +267,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.usb_off, size: 64, color: Colors.grey),
+                        Icon(Icons.cloud_off, size: 64, color: Colors.grey),
                         SizedBox(height: 16),
                         Text(
                           'System Offline',
@@ -249,7 +275,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ),
                         SizedBox(height: 8),
                         Text(
-                          'Select your Glove source and click Connect.',
+                          'Click CONNECT to subscribe to the Firebase Realtime Database stream.',
                           style: TextStyle(color: Colors.grey),
                         ),
                       ],
@@ -257,107 +283,58 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
           ),
 
-          // Collapsible Console Terminal
+          // Debug Console Terminal
           _buildConsoleTerminal(),
         ],
       ),
     );
   }
 
-  Widget _buildConnectionPanel(bool isConnected) {
+  Widget _buildConnectionPanel() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       decoration: const BoxDecoration(
         color: Color(0xFF141722),
         border: Border(bottom: BorderSide(color: Color(0xFF232A3D), width: 1)),
       ),
-      child: Wrap(
-        spacing: 16,
-        runSpacing: 12,
-        alignment: WrapAlignment.spaceBetween,
-        crossAxisAlignment: WrapCrossAlignment.center,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Source Switcher Toggle
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('Source:  ', style: TextStyle(fontWeight: FontWeight.w600)),
-              SegmentedButton<TelemetrySource>(
-                segments: const [
-                  ButtonSegment<TelemetrySource>(
-                    value: TelemetrySource.serial,
-                    label: Text('USB Serial'),
-                    icon: Icon(Icons.usb),
-                  ),
-                  ButtonSegment<TelemetrySource>(
-                    value: TelemetrySource.firebase,
-                    label: Text('Firebase'),
-                    icon: Icon(Icons.cloud),
-                  ),
-                ],
-                selected: {_activeSource},
-                onSelectionChanged: isConnected
-                    ? null
-                    : (Set<TelemetrySource> selection) {
-                        setState(() {
-                          _activeSource = selection.first;
-                        });
-                      },
-                style: const ButtonStyle(
-                  visualDensity: VisualDensity.compact,
-                ),
-              ),
-            ],
-          ),
-
-          // COM Port Selection (Visible only when Serial is selected)
-          if (_activeSource == TelemetrySource.serial)
-            Row(
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('Port:  ', style: TextStyle(fontWeight: FontWeight.w600)),
-                _availablePorts.isEmpty
-                    ? const Text(
-                        'No ports detected',
-                        style: TextStyle(color: Colors.redAccent, fontStyle: FontStyle.italic),
-                      )
-                    : Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF0D0E15),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: const Color(0xFF232A3D)),
-                        ),
-                        child: DropdownButton<String>(
-                          value: _selectedPort,
-                          underline: const SizedBox(),
-                          disabledHint: Text(_selectedPort ?? 'None'),
-                          dropdownColor: const Color(0xFF141722),
-                          onChanged: isConnected
-                              ? null
-                              : (String? newValue) {
-                                  setState(() {
-                                    _selectedPort = newValue;
-                                  });
-                                },
-                          items: _availablePorts.map<DropdownMenuItem<String>>((String value) {
-                            return DropdownMenuItem<String>(
-                              value: value,
-                              child: Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
-                            );
-                          }).toList(),
-                        ),
-                      ),
+                Row(
+                  children: [
+                    const Icon(Icons.cloud, size: 16, color: Color(0xFF8B5CF6)),
+                    const SizedBox(width: 8),
+                    Text(
+                      _isConnected ? 'Connected to Firebase RTDB' : 'Disconnected',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _getDatabaseUrl(),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[500],
+                    fontFamily: 'monospace',
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ],
             ),
-
-          // Connect / Disconnect Action Button
+          ),
           ElevatedButton.icon(
             onPressed: _toggleConnection,
-            icon: Icon(isConnected ? Icons.link_off : Icons.link),
-            label: Text(isConnected ? 'DISCONNECT' : 'CONNECT'),
+            icon: Icon(_isConnected ? Icons.cloud_off : Icons.cloud_queue),
+            label: Text(_isConnected ? 'DISCONNECT' : 'CONNECT'),
             style: ElevatedButton.styleFrom(
-              backgroundColor: isConnected
+              backgroundColor: _isConnected
                   ? const Color(0xFFEF4444)
                   : const Color(0xFF8B5CF6),
               foregroundColor: Colors.white,
@@ -451,63 +428,80 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const SizedBox(height: 20),
 
             // Flex Sensors Bars
-            ...List.generate(data.flex.length, (index) {
-              final val = data.flex[index];
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 16.0),
-                child: Column(
+            if (data.flex.percent.isEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 20),
+                child: Text(
+                  'No flex sensors detected. Awaiting calibration...',
+                  style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
+                  textAlign: TextAlign.center,
+                ),
+              )
+            else
+              ...List.generate(data.flex.percent.length, (index) {
+                final val = data.flex.percent[index];
+                final rawVal = data.flex.raw.length > index ? data.flex.raw[index] : 0;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'Finger ${index + 1} Flex',
+                            style: const TextStyle(fontWeight: FontWeight.w600, color: Color(0xFFCBD5E1)),
+                          ),
+                          Text(
+                            '$val% (Raw: $rawVal)',
+                            style: const TextStyle(
+                              fontFamily: 'monospace',
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF8B5CF6),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      _buildCustomProgressBar(val / 100.0, const [Color(0xFF3B82F6), Color(0xFF8B5CF6)]),
+                    ],
+                  ),
+                );
+              }),
+
+            const Divider(color: Color(0xFF232A3D), height: 24),
+
+            // Force FSR Sensor
+            Builder(
+              builder: (context) {
+                final val = data.force.percent.isNotEmpty ? data.force.percent.first : 0;
+                final rawVal = data.force.raw.isNotEmpty ? data.force.raw.first : 0;
+                return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          'Finger ${index + 1} Flex',
-                          style: const TextStyle(fontWeight: FontWeight.w600, color: Color(0xFFCBD5E1)),
+                        const Text(
+                          'Force Sensor (FSR)',
+                          style: TextStyle(fontWeight: FontWeight.w600, color: Color(0xFFCBD5E1)),
                         ),
                         Text(
-                          '$val%',
+                          '$val% (Raw: $rawVal)',
                           style: const TextStyle(
-                            fontFamily: 'Courier',
+                            fontFamily: 'monospace',
                             fontWeight: FontWeight.bold,
-                            color: Color(0xFF8B5CF6),
+                            color: Color(0xFF10B981),
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 8),
-                    _buildCustomProgressBar(val / 100.0, const [Color(0xFF3B82F6), Color(0xFF8B5CF6)]),
+                    _buildCustomProgressBar(val / 100.0, const [Color(0xFF10B981), Color(0xFF34D399)]),
                   ],
-                ),
-              );
-            }),
-
-            const Divider(color: Color(0xFF232A3D), height: 24),
-
-            // Force FSR Sensor
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'Force Sensor (FSR)',
-                      style: TextStyle(fontWeight: FontWeight.w600, color: Color(0xFFCBD5E1)),
-                    ),
-                    Text(
-                      '${data.force}%',
-                      style: const TextStyle(
-                        fontFamily: 'Courier',
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF10B981),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                _buildCustomProgressBar(data.force / 100.0, const [Color(0xFF10B981), Color(0xFF34D399)]),
-              ],
+                );
+              }
             ),
           ],
         ),
@@ -556,17 +550,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const Text(
-              'SMART BOX TELEMETRY',
+              'WEIGHT MOVEMENT TRACKING',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey),
             ),
             const SizedBox(height: 20),
 
-            if (data.boxes.isEmpty)
+            if (data.boxActions.isEmpty)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 40),
                 child: Center(
                   child: Text(
-                    'No boxes registered.\nAwaiting connection over ESP-NOW...',
+                    'No weights registered.\nAwaiting connection over ESP-NOW...',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
                   ),
@@ -576,11 +570,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ListView.separated(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                itemCount: data.boxes.length,
+                itemCount: data.boxActions.length,
                 separatorBuilder: (context, index) => const SizedBox(height: 12),
                 itemBuilder: (context, index) {
-                  final box = data.boxes[index];
-                  final hasCube = box.isCubePresent;
+                  final action = data.boxActions[index];
+                  final isPlaced = action.isPlaced;
+                  final timeString = DateTime.fromMillisecondsSinceEpoch(action.timestamp * 1000)
+                      .toLocal()
+                      .toString()
+                      .split('.')
+                      .first;
 
                   return Container(
                     padding: const EdgeInsets.all(16),
@@ -588,7 +587,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       color: const Color(0xFF0D0E15),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: hasCube ? const Color(0xFF8B5CF6).withOpacity(0.3) : const Color(0xFF232A3D),
+                        color: isPlaced ? const Color(0xFF10B981).withOpacity(0.3) : const Color(0xFFFF9E0B).withOpacity(0.3),
                       ),
                     ),
                     child: Column(
@@ -598,22 +597,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
-                              'Box MAC: ${box.mac}',
+                              'Weight ID: ${action.cubeId}',
                               style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF94A3B8)),
                             ),
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF10B981).withOpacity(0.1),
+                                color: isPlaced 
+                                    ? const Color(0xFF10B981).withOpacity(0.1)
+                                    : const Color(0xFFFF9E0B).withOpacity(0.1),
                                 borderRadius: BorderRadius.circular(20),
                               ),
-                              child: const Row(
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(Icons.circle, size: 8, color: Color(0xFF10B981)),
-                                  SizedBox(width: 6),
+                                  Icon(
+                                    Icons.circle, 
+                                    size: 8, 
+                                    color: isPlaced ? const Color(0xFF10B981) : const Color(0xFFFF9E0B),
+                                  ),
+                                  const SizedBox(width: 6),
                                   Text(
-                                    'Online',
-                                    style: TextStyle(fontSize: 11, color: Color(0xFF10B981), fontWeight: FontWeight.bold),
+                                    isPlaced ? 'Placed (הונח)' : 'Picked Up (הורם)',
+                                    style: TextStyle(
+                                      fontSize: 11, 
+                                      color: isPlaced ? const Color(0xFF10B981) : const Color(0xFFFF9E0B), 
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -627,24 +637,43 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             color: const Color(0xFF141722),
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          child: Column(
                             children: [
-                              const Text(
-                                'NFC Cube Slot:',
-                                style: TextStyle(color: Colors.grey, fontSize: 13),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text(
+                                    'Box Index:',
+                                    style: TextStyle(color: Colors.grey, fontSize: 13),
+                                  ),
+                                  Text(
+                                    'Box ${action.boxIndex + 1}',
+                                    style: const TextStyle(
+                                      fontFamily: 'monospace',
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF8B5CF6),
+                                    ),
+                                  ),
+                                ],
                               ),
-                              Text(
-                                hasCube ? box.cubeUid : '[EMPTY]',
-                                style: TextStyle(
-                                  fontFamily: 'Courier',
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                  color: hasCube ? const Color(0xFF8B5CF6) : Colors.grey,
-                                  shadows: hasCube
-                                      ? [Shadow(color: const Color(0xFF8B5CF6).withOpacity(0.5), blurRadius: 8)]
-                                      : null,
-                                ),
+                              const SizedBox(height: 6),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text(
+                                    'Last Event Time:',
+                                    style: TextStyle(color: Colors.grey, fontSize: 13),
+                                  ),
+                                  Text(
+                                    timeString,
+                                    style: const TextStyle(
+                                      fontFamily: 'monospace',
+                                      fontSize: 12,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
@@ -690,7 +719,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       const Icon(Icons.terminal, size: 18, color: Color(0xFF10B981)),
                       const SizedBox(width: 8),
                       const Text(
-                        'Raw Console Debug Terminal Log',
+                        'Firebase Terminal Log',
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.bold,
@@ -746,7 +775,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   itemBuilder: (context, index) {
                     if (_consoleLogs.isEmpty) {
                       return const Text(
-                        'No console logs received. Connect to a source to begin.',
+                        'No logs received.',
                         style: TextStyle(
                           color: Colors.grey,
                           fontFamily: 'monospace',

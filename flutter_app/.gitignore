@@ -41,5 +41,7 @@ app.*.map.json
 
 # Android Studio will place build artifacts here
 /android/app/debug
-/android/app/profile
 /android/app/release
+
+# Firebase sensitive credentials configuration
+assets/firebase_config.json

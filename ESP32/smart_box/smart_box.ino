@@ -2,6 +2,7 @@
 #include <Adafruit_PN532.h>
 #include <WiFi.h>
 #include <esp_now.h>
+#include <esp_wifi.h>
 #include "soc/soc.h"
 #include "soc/rtc_cntl_reg.h"
 #include "../parameters.h"
@@ -89,8 +90,12 @@ void checkHeartbeats() {
 }
 
 void connectToGlove() {
-  Serial.println("Searching for Glove...");
+  Serial.println("Searching for Glove across channels...");
+  int channel = 1;
   while (!isRegistered) {
+    // Set current channel
+    esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
+    
     AppMessage regMsg;
     regMsg.type = MSG_TYPE_REGISTER;
     memcpy(regMsg.box_mac, myMac, 6);
@@ -101,16 +106,21 @@ void connectToGlove() {
     uint8_t broadcastMac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
     esp_now_send(broadcastMac, (uint8_t *)&regMsg, sizeof(regMsg));
     
-    Serial.println("Broadcasting registration request...");
+    Serial.printf("Broadcasting registration request on channel %d...\n", channel);
     
-    // Wait 2 seconds for background ACK processing
+    // Wait 250ms on this channel for ACK
     unsigned long startWait = millis();
-    while (millis() - startWait < 2000) {
+    while (millis() - startWait < 250) {
       if (isRegistered) break;
-      delay(50);
+      delay(10);
+    }
+    
+    if (!isRegistered) {
+      channel++;
+      if (channel > 13) channel = 1;
     }
   }
-  Serial.println("Registered with Glove. Starting active loop...");
+  Serial.printf("Registered with Glove. Locked on channel %d. Starting active loop...\n", channel);
   last_received_from_glove = millis();
   last_heartbeat_sent = millis();
 }

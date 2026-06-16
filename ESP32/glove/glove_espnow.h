@@ -35,6 +35,18 @@ inline uint64_t macToKey(const uint8_t* mac) {
     return key;
 }
 
+// Helper to get Box index in the registry order
+inline int getBoxIndex(uint64_t boxKey) {
+    int idx = 0;
+    for (const auto& pair : boxRegistry) {
+        if (pair.first == boxKey) {
+            return idx;
+        }
+        idx++;
+    }
+    return 0;
+}
+
 // ESP-NOW Receive Callback
 #if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR >= 3
 inline void OnDataRecv(const esp_now_recv_info_t * recvInfo, const uint8_t *incomingData, int len) {
@@ -128,19 +140,47 @@ inline void OnDataRecv(const uint8_t * incoming_mac, const uint8_t *incomingData
             Serial.print("[EVENT] Cube ENTERED Box [");
             printMac(incoming_mac);
             Serial.print("] - Cube UID: ");
+            String cubeId = "";
             for (uint8_t i = 0; i < msg.uid_len; i++) {
                 Serial.printf(" %02X", msg.uid[i]);
+                char hex[3];
+                sprintf(hex, "%02X", msg.uid[i]);
+                cubeId += hex;
             }
             Serial.println();
+
+            int boxIndex = getBoxIndex(boxKey);
+            uint32_t timestamp = getEpochTime();
+            if (!pushEvent(cubeId, timestamp, true, boxIndex)) {
+                Serial.println("[ESP-NOW] Warning: Event queue full, cube entered event dropped!");
+            }
+
             triggerHapticClick();
         } 
         else if (msg.event == EVENT_CUBE_LEFT) {
+            String cubeId = "";
+            uint8_t len = msg.uid_len > 0 ? msg.uid_len : it->second.current_cube_len;
+            uint8_t* sourceUid = msg.uid_len > 0 ? msg.uid : it->second.current_cube_uid;
+            
+            for (uint8_t i = 0; i < len; i++) {
+                char hex[3];
+                sprintf(hex, "%02X", sourceUid[i]);
+                cubeId += hex;
+            }
+            if (cubeId.length() == 0) cubeId = "UNKNOWN";
+
             it->second.current_cube_len = 0;
             memset(it->second.current_cube_uid, 0, MAX_CUBE_UID_LEN);
 
             Serial.print("[EVENT] Cube LEFT Box [");
             printMac(incoming_mac);
             Serial.println("]");
+
+            int boxIndex = getBoxIndex(boxKey);
+            uint32_t timestamp = getEpochTime();
+            if (!pushEvent(cubeId, timestamp, false, boxIndex)) {
+                Serial.println("[ESP-NOW] Warning: Event queue full, cube left event dropped!");
+            }
         }
     }
 }

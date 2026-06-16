@@ -5,8 +5,10 @@
 import FlutterMacOS
 import Foundation
 
-import flutter_libserialport
+import firebase_core
+import firebase_database
 
 func RegisterGeneratedPlugins(registry: FlutterPluginRegistry) {
-  FlutterLibserialportPlugin.register(with: registry.registrar(forPlugin: "FlutterLibserialportPlugin"))
+  FLTFirebaseCorePlugin.register(with: registry.registrar(forPlugin: "FLTFirebaseCorePlugin"))
+  FLTFirebaseDatabasePlugin.register(with: registry.registrar(forPlugin: "FLTFirebaseDatabasePlugin"))
 }

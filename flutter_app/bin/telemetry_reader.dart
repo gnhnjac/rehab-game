@@ -1,6 +1,7 @@
+// ignore_for_file: avoid_print
 import 'dart:convert';
 import 'dart:io';
-import '../lib/models/glove_telemetry.dart';
+import 'package:flutter_app/models/glove_telemetry.dart';
 
 void main() async {
   // Disable console buffer line wrapping for cleaner UI if supported
@@ -51,29 +52,32 @@ void _renderTelemetry(GloveTelemetry data) {
   
   // Render Flex percentage bars
   print('Flex Sensors:');
-  for (int i = 0; i < data.flex.length; i++) {
-    final value = data.flex[i];
+  for (int i = 0; i < data.flex.percent.length; i++) {
+    final value = data.flex.percent[i];
+    final rawValue = data.flex.raw.length > i ? data.flex.raw[i] : 0;
     final activeSegments = (value / 5).round();
     final bar = '=' * activeSegments + ' ' * (20 - activeSegments);
-    print('  Finger ${i + 1}: [${bar}] $value%');
+    print('  Finger ${i + 1}: [$bar] $value% (Raw: $rawValue)');
   }
 
   print('-----------------------------------------------------');
   // Render Force FSR percentage bar
-  final forceValue = data.force;
+  final forceValue = data.force.percent.isNotEmpty ? data.force.percent.first : 0;
+  final forceRaw = data.force.raw.isNotEmpty ? data.force.raw.first : 0;
   final forceSegments = (forceValue / 5).round();
   final forceBar = '=' * forceSegments + ' ' * (20 - forceSegments);
-  print('  Force FSR: [${forceBar}] $forceValue%');
+  print('  Force FSR: [$forceBar] $forceValue% (Raw: $forceRaw)');
   print('-----------------------------------------------------');
 
-  // Render registered smart boxes
-  print('Connected Smart Boxes:');
-  if (data.boxes.isEmpty) {
-    print('  [No boxes registered. Waiting for box pair...]');
+  // Render registered weight movement tracking
+  print('Weight Movement Tracking:');
+  if (data.boxActions.isEmpty) {
+    print('  [No weights registered. Waiting for weight events...]');
   } else {
-    for (var box in data.boxes) {
-      final cubeStr = box.isCubePresent ? "Cube UID: ${box.cubeUid}" : "[EMPTY]";
-      print('  ● Box [${box.mac}] -> $cubeStr');
+    for (var action in data.boxActions) {
+      final statusStr = action.isPlaced ? "Placed in Box ${action.boxIndex + 1}" : "Picked Up";
+      final timeStr = DateTime.fromMillisecondsSinceEpoch(action.timestamp * 1000).toLocal().toString().split('.').first;
+      print('  ● Weight [${action.cubeId}] -> $statusStr (Last Event: $timeStr)');
     }
   }
   print('=====================================================\n');

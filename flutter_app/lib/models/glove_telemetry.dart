@@ -1,64 +1,122 @@
-class BoxTelemetry {
-  final String mac;
-  final String cubeUid;
+class SensorGroup {
+  final List<int> raw;
+  final List<int> percent;
 
-  BoxTelemetry({
-    required this.mac,
-    required this.cubeUid,
-  });
+  SensorGroup({required this.raw, required this.percent});
 
-  bool get isCubePresent => cubeUid.isNotEmpty;
+  factory SensorGroup.fromJson(Map<String, dynamic> json) {
+    List<int> parseList(dynamic val) {
+      if (val == null) return [];
+      if (val is List) {
+        return List<int>.from(val.map((x) => (x as num).toInt()));
+      }
+      // Handle single value fallback
+      return [(val as num).toInt()];
+    }
 
-  factory BoxTelemetry.fromJson(Map<String, dynamic> json) {
-    return BoxTelemetry(
-      mac: json['mac'] ?? '',
-      cubeUid: json['cube'] ?? '',
+    return SensorGroup(
+      raw: parseList(json['raw']),
+      percent: parseList(json['percent']),
     );
   }
 
   Map<String, dynamic> toJson() => {
-    'mac': mac,
-    'cube': cubeUid,
+    'raw': raw,
+    'percent': percent,
+  };
+}
+
+class BoxAction {
+  final String cubeId;
+  final int timestamp;
+  final bool isPlaced; // true = placed (הונח), false = picked up (הורם)
+  final int boxIndex; // index of the box (0-indexed)
+
+  BoxAction({
+    required this.cubeId,
+    required this.timestamp,
+    required this.isPlaced,
+    required this.boxIndex,
+  });
+
+  factory BoxAction.fromJson(String cubeId, dynamic json) {
+    if (json is List) {
+      // Tuple format: [timestamp, isPlaced, boxIndex]
+      return BoxAction(
+        cubeId: cubeId,
+        timestamp: json.isNotEmpty ? (json[0] as num).toInt() : 0,
+        isPlaced: json.length > 1 ? (json[1] is bool ? json[1] as bool : json[1] == 1) : false,
+        boxIndex: json.length > 2 ? (json[2] as num).toInt() : 0,
+      );
+    } else if (json is Map) {
+      // Map format fallback
+      return BoxAction(
+        cubeId: cubeId,
+        timestamp: (json['timestamp'] ?? 0) as int,
+        isPlaced: (json['isPlaced'] ?? json['flag'] ?? false) as bool,
+        boxIndex: (json['boxIndex'] ?? json['box'] ?? 0) as int,
+      );
+    }
+    throw FormatException("Invalid box action format: $json");
+  }
+
+  Map<String, dynamic> toJson() => {
+    'timestamp': timestamp,
+    'isPlaced': isPlaced,
+    'boxIndex': boxIndex,
   };
 }
 
 class GloveTelemetry {
-  final List<int> flex;
-  final int force;
   final bool calibrated;
-  final List<BoxTelemetry> boxes;
+  final SensorGroup flex;
+  final SensorGroup force;
+  final List<BoxAction> boxActions;
 
   GloveTelemetry({
+    required this.calibrated,
     required this.flex,
     required this.force,
-    required this.calibrated,
-    required this.boxes,
+    required this.boxActions,
   });
 
   factory GloveTelemetry.fromJson(Map<String, dynamic> json) {
+    final flexJson = json['flex'] != null 
+        ? Map<String, dynamic>.from(json['flex']) 
+        : {'raw': <int>[], 'percent': <int>[]};
+    final forceJson = json['force'] != null 
+        ? Map<String, dynamic>.from(json['force']) 
+        : {'raw': <int>[], 'percent': <int>[]};
+
+    List<BoxAction> boxActionsList = [];
+    if (json['weights'] != null) {
+      final Map weightsMap = json['weights'] as Map;
+      weightsMap.forEach((key, value) {
+        boxActionsList.add(BoxAction.fromJson(key.toString(), value));
+      });
+    }
+
     return GloveTelemetry(
-      flex: List<int>.from(json['flex'] ?? []),
-      force: json['force'] ?? 0,
       calibrated: json['calibrated'] ?? false,
-      boxes: (json['boxes'] as List? ?? [])
-          .map((b) => BoxTelemetry.fromJson(Map<String, dynamic>.from(b)))
-          .toList(),
+      flex: SensorGroup.fromJson(flexJson),
+      force: SensorGroup.fromJson(forceJson),
+      boxActions: boxActionsList,
     );
   }
 
   factory GloveTelemetry.uncalibrated() {
     return GloveTelemetry(
-      flex: [],
-      force: 0,
       calibrated: false,
-      boxes: [],
+      flex: SensorGroup(raw: [], percent: []),
+      force: SensorGroup(raw: [], percent: []),
+      boxActions: [],
     );
   }
 
   Map<String, dynamic> toJson() => {
-    'flex': flex,
-    'force': force,
     'calibrated': calibrated,
-    'boxes': boxes.map((b) => b.toJson()).toList(),
+    'flex': flex.toJson(),
+    'force': force.toJson(),
+    'weights': Map.fromEntries(boxActions.map((w) => MapEntry(w.cubeId, w.toJson()))),
   };
 }

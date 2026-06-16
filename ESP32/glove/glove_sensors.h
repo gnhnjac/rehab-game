@@ -100,4 +100,21 @@ inline void readMappedSensors(int* flexPercent, int& forcePercent) {
     forcePercent = constrain(forcePercent, 0, 100);
 }
 
+inline void readAllSensors(int* flexRaw, int* flexPercent, int& forceRaw, int& forcePercent) {
+    for (int i = 0; i < NUM_FINGERS; i++) {
+        int raw = analogRead(flexPins[i]);
+        flexSmoothed[i] = (raw * filterWeight) + (flexSmoothed[i] * (1.0 - filterWeight));
+        
+        flexRaw[i] = (int)flexSmoothed[i];
+        flexPercent[i] = map(flexRaw[i], flexMin[i], flexMax[i], 0, 100);
+        flexPercent[i] = constrain(flexPercent[i], 0, 100);
+    }
+
+    int rawForce = analogRead(FORCE_PIN);
+    forceSmoothed = (rawForce * filterWeight) + (forceSmoothed * (1.0 - filterWeight));
+    forceRaw = (int)forceSmoothed;
+    forcePercent = map(forceRaw, forceMin, forceMax, 0, 100);
+    forcePercent = constrain(forcePercent, 0, 100);
+}
+
 #endif
