@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rehab Glove Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Space+Grotesk:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-color: #0b0d13;
+      --card-bg: #141722;
+      --card-border: #232a3d;
+      --text-color: #f1f5f9;
+      --text-muted: #64748b;
+      --primary: #8b5cf6; /* Cyber Purple */
+      --secondary: #10b981; /* Neon Emerald */
+      --danger: #ef4444;
+      --accent: #3b82f6; /* Electric Blue */
+      --glow-purple: rgba(139, 92, 246, 0.15);
+      --glow-emerald: rgba(16, 185, 129, 0.15);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      font-family: 'Outfit', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    header {
+      background: linear-gradient(180deg, rgba(20, 23, 34, 0.8) 0%, rgba(11, 13, 19, 0) 100%);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--card-border);
+      padding: 1.5rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .logo-container {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .logo-icon {
+      width: 2.5rem;
+      height: 2.5rem;
+      border-radius: 0.75rem;
+      background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 15px var(--glow-purple);
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: bold;
+      font-size: 1.25rem;
+      color: white;
+    }
+
+    h1 {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      background: linear-gradient(to right, #ffffff, #a78bfa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 1rem;
+      border-radius: 50px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      background-color: #1a1e2e;
+      border: 1px solid var(--card-border);
+      transition: all 0.3s ease;
+    }
+
+    .status-badge.disconnected {
+      color: var(--danger);
+      border-color: rgba(239, 68, 68, 0.2);
+    }
+
+    .status-badge.connected {
+      color: var(--secondary);
+      border-color: rgba(16, 185, 129, 0.2);
+    }
+
+    .status-badge.uncalibrated {
+      color: #f59e0b;
+      border-color: rgba(245, 158, 11, 0.2);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: currentColor;
+      box-shadow: 0 0 8px currentColor;
+    }
+
+    .status-dot.ping {
+      animation: pulse 1.5s infinite alternate;
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(0.8); opacity: 0.5; }
+      100% { transform: scale(1.3); opacity: 1; }
+    }
+
+    .btn {
+      font-family: 'Outfit', sans-serif;
+      font-weight: 600;
+      padding: 0.625rem 1.25rem;
+      border-radius: 0.75rem;
+      border: none;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+      color: white;
+      box-shadow: 0 4px 15px rgba(139, 92, 246, 0.3);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(139, 92, 246, 0.5);
+    }
+
+    .btn-danger {
+      background: #ef4444;
+      color: white;
+      box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3);
+    }
+
+    .btn-danger:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(239, 68, 68, 0.5);
+    }
+
+    main {
+      flex: 1;
+      padding: 2rem;
+      max-width: 1400px;
+      width: 100%;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2rem;
+    }
+
+    @media (max-width: 1024px) {
+      main {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .card {
+      background-color: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 1.25rem;
+      padding: 1.75rem;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+      transition: border-color 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .card:hover {
+      border-color: #2e374f;
+    }
+
+    .card-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 1.25rem;
+      font-weight: 700;
+      margin-bottom: 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--card-border);
+      padding-bottom: 0.75rem;
+    }
+
+    .card-title-icon {
+      color: var(--primary);
+    }
+
+    /* Glove Sensors Styling */
+    .sensor-list {
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    .sensor-item {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .sensor-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.95rem;
+      font-weight: 600;
+    }
+
+    .sensor-name {
+      color: var(--text-color);
+    }
+
+    .sensor-value {
+      color: var(--accent);
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: bold;
+    }
+
+    .progress-container {
+      width: 100%;
+      height: 1rem;
+      background-color: #1a1e2e;
+      border-radius: 50px;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      border-radius: 50px;
+      background: linear-gradient(90deg, var(--accent) 0%, var(--primary) 100%);
+      transition: width 0.15s cubic-bezier(0.1, 0.8, 0.3, 1);
+      box-shadow: 0 0 10px rgba(139, 92, 246, 0.3);
+    }
+
+    .sensor-item.force .progress-bar {
+      background: linear-gradient(90deg, #10b981 0%, #34d399 100%);
+      box-shadow: 0 0 10px rgba(16, 185, 129, 0.3);
+    }
+
+    .sensor-item.force .sensor-value {
+      color: var(--secondary);
+    }
+
+    /* Smart Boxes Dashboard */
+    .boxes-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 1rem;
+    }
+
+    .box-card {
+      background-color: #1a1e2e;
+      border: 1px solid var(--card-border);
+      border-radius: 0.85rem;
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .box-card.active-cube {
+      border-color: rgba(139, 92, 246, 0.4);
+      box-shadow: inset 0 0 12px rgba(139, 92, 246, 0.08);
+    }
+
+    .box-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .box-mac {
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 700;
+      color: #94a3b8;
+    }
+
+    .box-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--secondary);
+    }
+
+    .cube-container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background-color: #10121d;
+      padding: 0.75rem 1rem;
+      border-radius: 0.5rem;
+      border: 1px solid rgba(255, 255, 255, 0.03);
+    }
+
+    .cube-label {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .cube-uid {
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 700;
+      color: #cbd5e1;
+    }
+
+    .box-card.active-cube .cube-uid {
+      color: #a78bfa;
+      text-shadow: 0 0 10px rgba(167, 139, 250, 0.5);
+    }
+
+    .no-boxes {
+      text-align: center;
+      color: var(--text-muted);
+      padding: 3rem 0;
+      font-style: italic;
+    }
+
+    /* Terminal Console */
+    .terminal-card {
+      grid-column: 1 / -1;
+      margin-top: 1rem;
+    }
+
+    .terminal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .terminal-body {
+      background-color: #06070a;
+      border-radius: 0.75rem;
+      padding: 1rem;
+      font-family: monospace;
+      font-size: 0.85rem;
+      color: #34d399;
+      height: 150px;
+      overflow-y: auto;
+      border: 1px solid #1a202c;
+      white-space: pre-wrap;
+    }
+
+    .terminal-line {
+      margin-bottom: 0.25rem;
+    }
+
+    .browser-warning {
+      background-color: rgba(239, 68, 68, 0.15);
+      border: 1px solid var(--danger);
+      color: var(--danger);
+      padding: 1.25rem;
+      border-radius: 1rem;
+      margin: 1.5rem 2rem 0;
+      display: none;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="logo-container">
+      <div class="logo-icon">R</div>
+      <div>
+        <h1>Rehab Glove System</h1>
+      </div>
+    </div>
+    <div class="controls">
+      <div id="statusBadge" class="status-badge disconnected">
+        <div class="status-dot"></div>
+        <span id="statusText">Disconnected</span>
+      </div>
+      <button id="connectBtn" class="btn btn-primary">Connect Glove</button>
+    </div>
+  </header>
+
+  <div id="browserWarning" class="browser-warning">
+    <strong>Browser Not Supported:</strong> Your browser does not support the Web Serial API. Please use Google Chrome, Microsoft Edge, or Opera to view this dashboard.
+  </div>
+
+  <main>
+    <!-- Left Column: Sensors -->
+    <div class="card">
+      <div class="card-title">
+        <span>Glove Sensor Calibration & Readings</span>
+      </div>
+      <div id="calibrationPrompt" style="display: block; text-align: center; padding: 2rem 0; color: var(--text-muted);">
+        Connect to serial and press the calibration button on the Glove board (GPIO 4) to start calibration...
+      </div>
+      <div id="sensorDashboard" style="display: none;" class="sensor-list">
+        <!-- Flex Sensors will be dynamically populated here based on NUM_FINGERS -->
+      </div>
+    </div>
+
+    <!-- Right Column: Smart Boxes -->
+    <div class="card">
+      <div class="card-title">
+        <span>Smart Boxes Dashboard</span>
+      </div>
+      <div id="boxesContainer" class="boxes-grid">
+        <div class="no-boxes">No boxes registered. Waiting for Glove connection...</div>
+      </div>
+    </div>
+
+    <!-- Bottom: Serial Log -->
+    <div class="card terminal-card">
+      <div class="card-title terminal-header">
+        <span>Raw Serial Terminal Log</span>
+        <button id="clearLogBtn" class="btn" style="padding: 0.25rem 0.75rem; background-color: #232a3d; color: #cbd5e1; font-size: 0.8rem;">Clear</button>
+      </div>
+      <div id="terminalBody" class="terminal-body">
+        [Dashboard ready. Click 'Connect Glove' above to read from Serial port...]
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const connectBtn = document.getElementById('connectBtn');
+    const statusBadge = document.getElementById('statusBadge');
+    const statusText = document.getElementById('statusText');
+    const terminalBody = document.getElementById('terminalBody');
+    const clearLogBtn = document.getElementById('clearLogBtn');
+    const calibrationPrompt = document.getElementById('calibrationPrompt');
+    const sensorDashboard = document.getElementById('sensorDashboard');
+    const boxesContainer = document.getElementById('boxesContainer');
+    const browserWarning = document.getElementById('browserWarning');
+
+    let port;
+    let reader;
+    let keepReading = true;
+
+    // Check compatibility
+    if (!("serial" in navigator)) {
+      browserWarning.style.display = "block";
+      connectBtn.disabled = true;
+    }
+
+    connectBtn.addEventListener('click', async () => {
+      if (port) {
+        disconnect();
+      } else {
+        await connect();
+      }
+    });
+
+    clearLogBtn.addEventListener('click', () => {
+      terminalBody.innerHTML = '';
+    });
+
+    function logToTerminal(text) {
+      const line = document.createElement('div');
+      line.className = 'terminal-line';
+      line.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
+      terminalBody.appendChild(line);
+      terminalBody.scrollTop = terminalBody.scrollHeight;
+    }
+
+    function setStatus(state) {
+      statusBadge.className = 'status-badge ' + state;
+      statusText.textContent = state.charAt(0).toUpperCase() + state.slice(1);
+    }
+
+    async function connect() {
+      try {
+        port = await navigator.serial.requestPort();
+        await port.open({ baudRate: 115200 });
+
+        setStatus('connected');
+        connectBtn.textContent = 'Disconnect';
+        connectBtn.className = 'btn btn-danger';
+        logToTerminal('Serial connection established.');
+
+        keepReading = true;
+        readLoop();
+      } catch (err) {
+        logToTerminal(`Connection Error: ${err.message}`);
+        disconnect();
+      }
+    }
+
+    async function disconnect() {
+      keepReading = false;
+      if (reader) {
+        try {
+          await reader.cancel();
+        } catch (e) {}
+      }
+      if (port) {
+        try {
+          await port.close();
+        } catch (e) {}
+      }
+      port = null;
+      reader = null;
+
+      setStatus('disconnected');
+      connectBtn.textContent = 'Connect Glove';
+      connectBtn.className = 'btn btn-primary';
+      calibrationPrompt.style.display = 'block';
+      sensorDashboard.style.display = 'none';
+      boxesContainer.innerHTML = '<div class="no-boxes">No boxes registered. Waiting for Glove connection...</div>';
+      logToTerminal('Serial disconnected.');
+    }
+
+    async function readLoop() {
+      const textDecoder = new TextDecoderStream();
+      const readableStreamClosed = port.readable.pipeTo(textDecoder.writable);
+      const streamReader = textDecoder.readable.getReader();
+      reader = streamReader;
+
+      let buffer = '';
+      try {
+        while (keepReading) {
+          const { value, done } = await streamReader.read();
+          if (done) {
+            break;
+          }
+          buffer += value;
+          const lines = buffer.split('\n');
+          buffer = lines.pop(); // Keep partial line in buffer
+
+          for (let line of lines) {
+            line = line.trim();
+            if (!line) continue;
+
+            if (line.startsWith('JSON:')) {
+              try {
+                const jsonStr = line.substring(5);
+                const data = JSON.parse(jsonStr);
+                updateUI(data);
+              } catch (e) {
+                // Ignore parse errors on half-read lines
+              }
+            } else {
+              // Print standard debug messages in terminal
+              logToTerminal(line);
+            }
+          }
+        }
+      } catch (err) {
+        logToTerminal(`Stream Error: ${err.message}`);
+      } finally {
+        streamReader.releaseLock();
+      }
+    }
+
+    function updateUI(data) {
+      if (!data.calibrated) {
+        setStatus('uncalibrated');
+        calibrationPrompt.style.display = 'block';
+        sensorDashboard.style.display = 'none';
+        return;
+      }
+
+      setStatus('connected');
+      calibrationPrompt.style.display = 'none';
+      sensorDashboard.style.display = 'flex';
+
+      // 1. Populate Flex and Force Sensors Dynamically
+      if (data.flex) {
+        // Build elements if number of sensors changes
+        if (sensorDashboard.children.length !== data.flex.length + 1) {
+          sensorDashboard.innerHTML = '';
+          
+          // Flex sensors
+          data.flex.forEach((val, idx) => {
+            const item = document.createElement('div');
+            item.className = 'sensor-item';
+            item.id = `flex-sensor-container-${idx}`;
+            item.innerHTML = `
+              <div class="sensor-header">
+                <span class="sensor-name">Flex Sensor (Finger ${idx + 1})</span>
+                <span id="flex-val-${idx}" class="sensor-value">0%</span>
+              </div>
+              <div class="progress-container">
+                <div id="flex-bar-${idx}" class="progress-bar" style="width: 0%"></div>
+              </div>
+            `;
+            sensorDashboard.appendChild(item);
+          });
+
+          // Force sensor
+          const forceItem = document.createElement('div');
+          forceItem.className = 'sensor-item force';
+          forceItem.innerHTML = `
+            <div class="sensor-header">
+              <span class="sensor-name">Force Sensor (FSR)</span>
+              <span id="force-val" class="sensor-value">0%</span>
+            </div>
+            <div class="progress-container">
+              <div id="force-bar" class="progress-bar" style="width: 0%"></div>
+            </div>
+          `;
+          sensorDashboard.appendChild(forceItem);
+        }
+
+        // Update values
+        data.flex.forEach((val, idx) => {
+          const bar = document.getElementById(`flex-bar-${idx}`);
+          const text = document.getElementById(`flex-val-${idx}`);
+          if (bar && text) {
+            bar.style.width = `${val}%`;
+            text.textContent = `${val}%`;
+          }
+        });
+
+        const forceBar = document.getElementById('force-bar');
+        const forceText = document.getElementById('force-val');
+        if (forceBar && forceText) {
+          forceBar.style.width = `${data.force}%`;
+          forceText.textContent = `${data.force}%`;
+        }
+      }
+
+      // 2. Populate Smart Boxes
+      if (data.boxes) {
+        if (data.boxes.length === 0) {
+          boxesContainer.innerHTML = '<div class="no-boxes">No boxes registered. Waiting for dynamic link...</div>';
+        } else {
+          let html = '';
+          data.boxes.forEach(box => {
+            const hasCube = box.cube && box.cube.length > 0;
+            const activeClass = hasCube ? 'active-cube' : '';
+            const statusDot = `<span class="status-badge connected"><span class="status-dot ping"></span>Online</span>`;
+            
+            html += `
+              <div class="box-card ${activeClass}">
+                <div class="box-card-header">
+                  <span class="box-mac">MAC: ${box.mac}</span>
+                  ${statusDot}
+                </div>
+                <div class="cube-container">
+                  <span class="cube-label">Cube Placement</span>
+                  <span class="cube-uid">${hasCube ? box.cube : '[EMPTY]'}</span>
+                </div>
+              </div>
+            `;
+          });
+          boxesContainer.innerHTML = html;
+        }
+      }
+    }
+  </script>
+</body>
+</html>

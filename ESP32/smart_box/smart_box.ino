@@ -6,10 +6,6 @@
 #include "soc/rtc_cntl_reg.h"
 #include "../parameters.h"
 
-// Define I2C pins for ESP32 (from working unit test)
-#define SDA_PIN 21
-#define SCL_PIN 22
-
 Adafruit_PN532 nfc(SDA_PIN, SCL_PIN);
 
 // State variables
@@ -17,6 +13,9 @@ bool isRegistered = false;
 bool nfcFound = false; // Flag to track if the PN532 was successfully initialized
 uint8_t gloveMac[6];
 uint8_t myMac[6];
+
+unsigned long last_received_from_glove = 0;
+unsigned long last_heartbeat_sent = 0;
 
 // Send callback (Empty, unused)
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
@@ -50,7 +49,70 @@ void OnDataRecv(const uint8_t * incoming_mac, const uint8_t *incomingData, int l
                 esp_now_add_peer(&peerInfo);
             }
         }
+        last_received_from_glove = millis();
     }
+    else if (msg.type == MSG_TYPE_HEARTBEAT) {
+        if (isRegistered && memcmp(incoming_mac, gloveMac, 6) == 0) {
+            last_received_from_glove = millis();
+        }
+    }
+}
+
+void checkHeartbeats() {
+  if (!isRegistered) return;
+
+  unsigned long now = millis();
+
+  // 1. Send heartbeat every 1 second
+  if (now - last_heartbeat_sent >= 1000) {
+    last_heartbeat_sent = now;
+    AppMessage heartbeatMsg;
+    heartbeatMsg.type = MSG_TYPE_HEARTBEAT;
+    memcpy(heartbeatMsg.box_mac, myMac, 6);
+    heartbeatMsg.event = EVENT_NONE;
+    heartbeatMsg.uid_len = 0;
+    memset(heartbeatMsg.uid, 0, MAX_CUBE_UID_LEN);
+
+    esp_now_send(gloveMac, (uint8_t *)&heartbeatMsg, sizeof(heartbeatMsg));
+  }
+
+  // 2. Check for Glove timeout (5 seconds)
+  if (now - last_received_from_glove > 5000) {
+    Serial.println("[Smart Box] Lost connection to Glove (heartbeat timeout). Unregistering...");
+    isRegistered = false;
+    
+    // Delete peer to free resources
+    if (esp_now_is_peer_exist(gloveMac)) {
+      esp_now_del_peer(gloveMac);
+    }
+  }
+}
+
+void connectToGlove() {
+  Serial.println("Searching for Glove...");
+  while (!isRegistered) {
+    AppMessage regMsg;
+    regMsg.type = MSG_TYPE_REGISTER;
+    memcpy(regMsg.box_mac, myMac, 6);
+    regMsg.event = EVENT_NONE;
+    regMsg.uid_len = 0;
+    memset(regMsg.uid, 0, MAX_CUBE_UID_LEN);
+
+    uint8_t broadcastMac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    esp_now_send(broadcastMac, (uint8_t *)&regMsg, sizeof(regMsg));
+    
+    Serial.println("Broadcasting registration request...");
+    
+    // Wait 2 seconds for background ACK processing
+    unsigned long startWait = millis();
+    while (millis() - startWait < 2000) {
+      if (isRegistered) break;
+      delay(50);
+    }
+  }
+  Serial.println("Registered with Glove. Starting active loop...");
+  last_received_from_glove = millis();
+  last_heartbeat_sent = millis();
 }
 
 void sendNfcEvent(CubeEventType event, uint8_t *uid, uint8_t uidLen) {
@@ -71,7 +133,7 @@ void sendNfcEvent(CubeEventType event, uint8_t *uid, uint8_t uidLen) {
 
 void setup(void) {
   // Disable the brownout detector to prevent power dips from resetting the chip
-  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
+  //WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
 
   Serial.begin(115200);
   delay(1000);
@@ -130,48 +192,39 @@ void setup(void) {
     nfc.SAMConfig();
   }
 
-  // 4. Dynamic registration loop
-  Serial.println("Searching for Glove...");
-  while (!isRegistered) {
-    AppMessage regMsg;
-    regMsg.type = MSG_TYPE_REGISTER;
-    memcpy(regMsg.box_mac, myMac, 6);
-    regMsg.event = EVENT_NONE;
-    regMsg.uid_len = 0;
-    memset(regMsg.uid, 0, MAX_CUBE_UID_LEN);
-
-    uint8_t broadcastMac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-    esp_now_send(broadcastMac, (uint8_t *)&regMsg, sizeof(regMsg));
-    
-    Serial.println("Broadcasting registration request...");
-    
-    // Wait 2 seconds for background ACK processing
-    unsigned long startWait = millis();
-    while (millis() - startWait < 2000) {
-      if (isRegistered) break;
-      delay(50);
-    }
-  }
-
-  Serial.println("Registered with Glove. Starting active loop...");
+  // 4. Dynamic registration
+  connectToGlove();
 }
 
 void loop(void) {
+  if (!isRegistered) {
+    connectToGlove();
+    return;
+  }
+
+  // Handle heartbeat sending and timeout checking
+  checkHeartbeats();
+
   if (nfcFound) {
     uint8_t success;
     uint8_t uid[] = { 0, 0, 0, 0, 0, 0, 0 };  // Buffer to store the returned UID
     uint8_t uidLength;                        // Length of the UID (4 or 7 bytes)
 
-    // STATE 1: Wait for a card to be placed (Blocking call, identical to working unit test)
-    success = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength);
+    // Wait for card with a 100ms timeout (non-blocking)
+    success = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength, 100);
 
     if (success) {
       Serial.println("Card Entered!");
       sendNfcEvent(EVENT_CUBE_ENTERED, uid, uidLength);
       
-      // STATE 2: Card is present. Poll it in a loop to detect when it leaves.
+      // Card is present. Poll it in a loop to detect when it leaves.
       int consecutiveFailures = 0;
       while (consecutiveFailures < 5) {
+        checkHeartbeats();
+        if (!isRegistered) {
+          break; // Lost Glove connection while card is present
+        }
+
         delay(100);
         
         uint8_t pollUid[7];
@@ -185,21 +238,34 @@ void loop(void) {
         }
       }
       
-      // STATE 3: Card is removed
-      Serial.println("Card Left!");
-      sendNfcEvent(EVENT_CUBE_LEFT, uid, uidLength);
+      if (isRegistered) {
+        Serial.println("Card Left!");
+        sendNfcEvent(EVENT_CUBE_LEFT, uid, uidLength);
+      }
     }
   } else {
-    // SIMULATED MODE: Send simulated events every 10 seconds to test WiFi/ESP-NOW communication
+    // SIMULATED MODE: Send simulated events every 10 seconds, checking heartbeats
     uint8_t simulatedUid[] = { 0x04, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66 };
     uint8_t uidLen = 7;
     
     Serial.println("[Simulated] Cube Entered!");
     sendNfcEvent(EVENT_CUBE_ENTERED, simulatedUid, uidLen);
-    delay(5000); // 5 seconds inside
+    
+    unsigned long startWait = millis();
+    while (millis() - startWait < 5000 && isRegistered) {
+      checkHeartbeats();
+      delay(50);
+    }
 
-    Serial.println("[Simulated] Cube Left!");
-    sendNfcEvent(EVENT_CUBE_LEFT, simulatedUid, uidLen);
-    delay(5000); // 5 seconds outside
+    if (isRegistered) {
+      Serial.println("[Simulated] Cube Left!");
+      sendNfcEvent(EVENT_CUBE_LEFT, simulatedUid, uidLen);
+    }
+
+    startWait = millis();
+    while (millis() - startWait < 5000 && isRegistered) {
+      checkHeartbeats();
+      delay(50);
+    }
   }
 }

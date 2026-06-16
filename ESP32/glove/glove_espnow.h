@@ -5,12 +5,14 @@
 #include <WiFi.h>
 #include <unordered_map>
 #include "../parameters.h"
+#include "glove_haptic.h"
 
 struct RegisteredBox {
     uint8_t mac[6];
     uint8_t current_cube_uid[MAX_CUBE_UID_LEN];
     uint8_t current_cube_len;
     bool active;
+    unsigned long last_seen;
 };
 
 // Box registry using std::unordered_map (key is MAC packed as uint64_t for O(1) lookup)
@@ -63,6 +65,7 @@ inline void OnDataRecv(const uint8_t * incoming_mac, const uint8_t *incomingData
                 newBox.active = true;
                 newBox.current_cube_len = 0;
                 memset(newBox.current_cube_uid, 0, MAX_CUBE_UID_LEN);
+                newBox.last_seen = millis();
                 
                 boxRegistry[boxKey] = newBox;
 
@@ -85,6 +88,8 @@ inline void OnDataRecv(const uint8_t * incoming_mac, const uint8_t *incomingData
                 Serial.println("[Glove] Error: Maximum box limit reached!");
                 return;
             }
+        } else {
+            it->second.last_seen = millis(); // Refresh last seen
         }
 
         // Send ACK back to the box
@@ -92,6 +97,18 @@ inline void OnDataRecv(const uint8_t * incoming_mac, const uint8_t *incomingData
         ack_msg.type = MSG_TYPE_ACK;
         WiFi.macAddress(ack_msg.box_mac); // Pass Glove's MAC back
         esp_now_send(incoming_mac, (uint8_t *)&ack_msg, sizeof(ack_msg));
+    }
+    else if (msg.type == MSG_TYPE_HEARTBEAT) {
+        auto it = boxRegistry.find(boxKey);
+        if (it != boxRegistry.end()) {
+            it->second.last_seen = millis();
+            
+            // Reply with heartbeat response
+            AppMessage reply_msg;
+            reply_msg.type = MSG_TYPE_HEARTBEAT;
+            WiFi.macAddress(reply_msg.box_mac);
+            esp_now_send(incoming_mac, (uint8_t *)&reply_msg, sizeof(reply_msg));
+        }
     }
     else if (msg.type == MSG_TYPE_EVENT) {
         auto it = boxRegistry.find(boxKey);
@@ -101,6 +118,8 @@ inline void OnDataRecv(const uint8_t * incoming_mac, const uint8_t *incomingData
             Serial.println();
             return;
         }
+
+        it->second.last_seen = millis(); // Refresh last seen on event
 
         if (msg.event == EVENT_CUBE_ENTERED) {
             it->second.current_cube_len = msg.uid_len;
@@ -113,6 +132,7 @@ inline void OnDataRecv(const uint8_t * incoming_mac, const uint8_t *incomingData
                 Serial.printf(" %02X", msg.uid[i]);
             }
             Serial.println();
+            triggerHapticClick();
         } 
         else if (msg.event == EVENT_CUBE_LEFT) {
             it->second.current_cube_len = 0;
@@ -121,6 +141,28 @@ inline void OnDataRecv(const uint8_t * incoming_mac, const uint8_t *incomingData
             Serial.print("[EVENT] Cube LEFT Box [");
             printMac(incoming_mac);
             Serial.println("]");
+        }
+    }
+}
+
+// Timeout check function
+inline void checkBoxTimeouts() {
+    unsigned long now = millis();
+    for (auto it = boxRegistry.begin(); it != boxRegistry.end(); ) {
+        if (now - it->second.last_seen > 5000) {
+            Serial.print("[Glove] Heartbeat timeout. Unregistering Box [");
+            printMac(it->second.mac);
+            Serial.println("]");
+
+            // Delete box as peer to free up peer list slots
+            if (esp_now_is_peer_exist(it->second.mac)) {
+                esp_now_del_peer(it->second.mac);
+            }
+            
+            // Erase from registry
+            it = boxRegistry.erase(it);
+        } else {
+            ++it;
         }
     }
 }

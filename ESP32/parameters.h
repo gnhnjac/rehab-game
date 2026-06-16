@@ -1,40 +1,30 @@
 #pragma once
 //user defined parameters
 
-// OLED display width and height, in pixels
-#define SCREEN_WIDTH 128
-#define SCREEN_HEIGHT 64
-
-//  4x3 keypad GPIO pins
-#define R4   19 
-#define R3   13 
-#define R2   12 
-#define R1   4    
-#define C1   21 
-#define C2   27 
-#define C3   33  
-
-// INMP441 I2S microphone GPIO pins
-#define I2S_WS 14
-#define I2S_SD 15
-#define I2S_SCK 32
-#define I2S_PORT I2S_NUM_0
-
-// external DAC MAX98357A GPIO pins
-#define DAC_BCK_PIN 26
-#define DAC_WS_PIN 25
-#define DAC_DATA_PIN 22
+// --- I2C CONFIGURATION FOR SENSORS/HAPTICS ---
+#define SDA_PIN 21
+#define SCL_PIN 22
 
 // --- GLOVE SENSOR CONFIGURATION ---
-// NOTE: We use only ADC1 pins (32, 33, 34, 35, 36, 39) because ADC2 pins (like 25)
+// NOTE: We use only ADC1 pins (32, 33, 34, 35, 36, 39) because ADC2 pins (like 2)
 // cannot be read using analogRead() when Wi-Fi/ESP-NOW is active.
+// Labeled pins on the DOIT ESP32 board:
+// - GPIO 36 is labeled VP
+// - GPIO 39 is labeled VN
+// - GPIO 34 is labeled D34
+// - GPIO 35 is labeled D35
+// - GPIO 32 is labeled D32
+// - GPIO 33 is labeled D33
+
 #define NUM_FINGERS 5
-#define FLEX_PIN_1 33
-#define FLEX_PIN_2 32
-#define FLEX_PIN_3 35
-#define FLEX_PIN_4 34
-#define FLEX_PIN_5 36
-#define FORCE_PIN 2 // Analog pin for FSR sensor (using Sensor VN pin)
+
+#define FLEX_PIN_1 33  // Labeled D33
+#define FLEX_PIN_2 32  // Labeled D32
+#define FLEX_PIN_3 35  // Labeled D35
+#define FLEX_PIN_4 34  // Labeled D34
+#define FLEX_PIN_5 39  // Labeled VN
+#define FORCE_PIN 36   // Labeled VP
+
 #define CALIBRATION_BUTTON_PIN 4
 
 // --- ESP-NOW PROTOCOL DEFINITIONS ---
@@ -44,7 +34,8 @@
 typedef enum {
     MSG_TYPE_REGISTER,     // Box -> Glove: Request registration
     MSG_TYPE_EVENT,        // Box -> Glove: NFC event
-    MSG_TYPE_ACK           // Glove -> Box: Registration acknowledgment
+    MSG_TYPE_ACK,          // Glove -> Box: Registration acknowledgment
+    MSG_TYPE_HEARTBEAT     // Bidirectional: Connection keep-alive
 } MsgType;
 
 typedef enum {
