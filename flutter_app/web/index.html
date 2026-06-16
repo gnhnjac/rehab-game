@@ -31,6 +31,39 @@
 
   <title>flutter_app</title>
   <link rel="manifest" href="manifest.json">
+  <script>
+    window.webSerialHelper = {
+      isSupported: function() {
+        return 'serial' in navigator;
+      },
+      requestPort: async function() {
+        return await navigator.serial.requestPort();
+      },
+      openPort: async function(port, baudRate) {
+        await port.open({ baudRate: baudRate });
+        return port.readable.getReader();
+      },
+      readChunk: async function(reader) {
+        const { value, done } = await reader.read();
+        return { 
+          value: value ? Array.from(value) : null, 
+          done: done 
+        };
+      },
+      closePort: async function(port, reader) {
+        if (reader) {
+          try {
+            await reader.cancel();
+          } catch(e){}
+        }
+        if (port) {
+          try {
+            await port.close();
+          } catch(e){}
+        }
+      }
+    };
+  </script>
 </head>
 <body>
   <!--
