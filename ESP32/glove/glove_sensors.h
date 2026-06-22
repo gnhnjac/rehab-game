@@ -6,7 +6,7 @@
 
 // Configuration
 const int flexPins[NUM_FINGERS] = {FLEX_PIN_1, FLEX_PIN_2, FLEX_PIN_3, FLEX_PIN_4, FLEX_PIN_5};
-const float filterWeight = 0.10;
+const float filterWeight = SENSOR_FILTER_WEIGHT;
 
 // State
 int flexMin[NUM_FINGERS];
@@ -52,15 +52,15 @@ inline void runSensorCalibration() {
             int raw = analogRead(flexPins[i]);
             flexSmoothed[i] = (raw * filterWeight) + (flexSmoothed[i] * (1.0 - filterWeight));
             
-            if (flexSmoothed[i] < flexMin[i]) flexMin[i] = (int)flexSmoothed[i];
-            if (flexSmoothed[i] > flexMax[i]) flexMax[i] = (int)flexSmoothed[i];
+            if (raw < flexMin[i]) flexMin[i] = raw;
+            if (raw > flexMax[i]) flexMax[i] = raw;
         }
 
         int rawForce = analogRead(FORCE_PIN);
         forceSmoothed = (rawForce * filterWeight) + (forceSmoothed * (1.0 - filterWeight));
 
-        if (forceSmoothed < forceMin) forceMin = (int)forceSmoothed;
-        if (forceSmoothed > forceMax) forceMax = (int)forceSmoothed;
+        if (rawForce < forceMin) forceMin = rawForce;
+        if (rawForce > forceMax) forceMax = rawForce;
 
         if (millis() - lastStatusPrint >= 1000) {
             int elapsedSec = (millis() - startTime) / 1000;
@@ -96,7 +96,7 @@ inline void readMappedSensors(int* flexPercent, int& forcePercent) {
 
     int rawForce = analogRead(FORCE_PIN);
     forceSmoothed = (rawForce * filterWeight) + (forceSmoothed * (1.0 - filterWeight));
-    forcePercent = map((int)forceSmoothed, forceMin, forceMax, 0, 100);
+    forcePercent = map((int)forceSmoothed, forceMax, forceMin, 0, 100);
     forcePercent = constrain(forcePercent, 0, 100);
 }
 
@@ -113,7 +113,7 @@ inline void readAllSensors(int* flexRaw, int* flexPercent, int& forceRaw, int& f
     int rawForce = analogRead(FORCE_PIN);
     forceSmoothed = (rawForce * filterWeight) + (forceSmoothed * (1.0 - filterWeight));
     forceRaw = (int)forceSmoothed;
-    forcePercent = map(forceRaw, forceMin, forceMax, 0, 100);
+    forcePercent = map(forceRaw, forceMax, forceMin, 0, 100);
     forcePercent = constrain(forcePercent, 0, 100);
 }
 
