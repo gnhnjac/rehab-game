@@ -26,7 +26,7 @@
 #define FORCE_PIN 36   // Labeled VP
 
 #define CALIBRATION_BUTTON_PIN 4
-#define SENSOR_FILTER_WEIGHT 0.5f // Larger weight responds faster with less smoothing
+#define SENSOR_FILTER_WEIGHT 0.1f // Larger weight responds faster with less smoothing
 
 // --- ESP-NOW PROTOCOL DEFINITIONS ---
 #define MAX_CUBE_UID_LEN 7
