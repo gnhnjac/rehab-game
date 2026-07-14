@@ -38,7 +38,17 @@ class _FlexCalibrationScreenState extends State<FlexCalibrationScreen> {
   @override
   void initState() {
     super.initState();
+    _ensureConnected();
     _startPolling();
+  }
+
+  Future<void> _ensureConnected() async {
+    final service = TelemetryProvider.getService();
+    if (!service.isConnected) {
+      try {
+        await service.connect();
+      } catch (_) {}
+    }
   }
 
   @override
