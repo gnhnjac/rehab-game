@@ -5,6 +5,7 @@ import '../state/app_state_scope.dart';
 
 import '../widgets/patient_avatar.dart';
 import 'box_calibration_screen.dart';
+import 'cube_calibration_screen.dart';
 import 'fsr_calibration_screen.dart';
 import 'patient_detail_screen.dart';
 import 'patient_form_screen.dart';
@@ -138,6 +139,18 @@ class PatientListScreen extends StatelessWidget {
                     color: const Color(0xFF10B981),
                     onTap: () => Navigator.push(context,
                         MaterialPageRoute(builder: (_) => const BoxCalibrationScreen())),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _buildCalibrationCard(
+                    context: context,
+                    icon: Icons.nfc_rounded,
+                    title: 'RFID Cubes',
+                    subtitle: 'Register Tags',
+                    color: Colors.orangeAccent,
+                    onTap: () => Navigator.push(context,
+                        MaterialPageRoute(builder: (_) => const CubeCalibrationScreen())),
                   ),
                 ),
               ],
