@@ -535,6 +535,7 @@ inline void handleActivePrescription() {
     }
     
     currentPrescription = rx;
+    savePrescriptionToNVS(rx); // Persist received prescription!
     Serial.printf("[Rx] Received prescription: type=%d, cycles=%d, timer=%d, diff=%d, targetWeight=%d, holdTime=%d\n",
                   rx.gameType, rx.totalCycles, rx.timerSeconds, rx.difficulty, rx.targetWeightGrams, rx.requiredHoldTimeSeconds);
     

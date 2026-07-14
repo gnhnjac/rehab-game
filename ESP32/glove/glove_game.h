@@ -46,6 +46,124 @@ struct GamePrescription {
     int sequenceCount = 0;
 };
 
+inline void savePrescriptionToNVS(const GamePrescription& rx) {
+    Preferences prefs;
+    prefs.begin("prescription", false);
+    prefs.putInt("type", (int)rx.gameType);
+    prefs.putInt("timer", rx.timerSeconds);
+    prefs.putInt("cycles", rx.totalCycles);
+    prefs.putInt("difficulty", rx.difficulty);
+    prefs.putInt("tgtWeight", rx.targetWeightGrams);
+    prefs.putInt("holdTime", rx.requiredHoldTimeSeconds);
+    
+    // Save active fingers
+    uint32_t activeFingersVal = 0;
+    for (int i = 0; i < NUM_FINGERS; i++) {
+        if (rx.activeFingers[i]) activeFingersVal |= (1 << i);
+    }
+    prefs.putUInt("actFingers", activeFingersVal);
+    
+    // Save required ROM
+    for (int i = 0; i < NUM_FINGERS; i++) {
+        char key[16];
+        sprintf(key, "rom_%d", i);
+        prefs.putInt(key, rx.requiredRom[i]);
+    }
+    
+    // Save sequence
+    prefs.putInt("seqCount", rx.sequenceCount);
+    for (int i = 0; i < NUM_FINGERS; i++) {
+        char key[16];
+        sprintf(key, "seq_%d", i);
+        prefs.putInt(key, rx.sequence[i]);
+    }
+    
+    // Save cubes
+    prefs.putInt("cubesCount", rx.cubesCount);
+    for (int i = 0; i < rx.cubesCount; i++) {
+        char keyUid[24], keyCol[24], keyShp[24], keyWgt[24];
+        sprintf(keyUid, "cube_uid_%d", i);
+        sprintf(keyCol, "cube_col_%d", i);
+        sprintf(keyShp, "cube_shp_%d", i);
+        sprintf(keyWgt, "cube_wgt_%d", i);
+        
+        if (rx.cubes[i].uid_len > 0) {
+            prefs.putBytes(keyUid, rx.cubes[i].uid, rx.cubes[i].uid_len);
+        }
+        prefs.putInt(keyUid + String("_len"), rx.cubes[i].uid_len);
+        prefs.putString(keyCol, rx.cubes[i].color);
+        prefs.putString(keyShp, rx.cubes[i].shape);
+        prefs.putInt(keyWgt, rx.cubes[i].weightGrams);
+    }
+    
+    prefs.end();
+    Serial.println("[NVS] Game prescription saved to NVS successfully.");
+}
+
+inline bool loadPrescriptionFromNVS(GamePrescription& rx) {
+    Preferences prefs;
+    if (!prefs.begin("prescription", true)) return false;
+    
+    int typeVal = prefs.getInt("type", 0);
+    if (typeVal == 0) {
+        prefs.end();
+        return false; // No valid prescription stored
+    }
+    
+    rx.gameType = (GameType)typeVal;
+    rx.timerSeconds = prefs.getInt("timer", 60);
+    rx.totalCycles = prefs.getInt("cycles", 3);
+    rx.difficulty = prefs.getInt("difficulty", 1);
+    rx.targetWeightGrams = prefs.getInt("tgtWeight", 100);
+    rx.requiredHoldTimeSeconds = prefs.getInt("holdTime", 5);
+    
+    // Load active fingers
+    uint32_t activeFingersVal = prefs.getUInt("actFingers", 0);
+    for (int i = 0; i < NUM_FINGERS; i++) {
+        rx.activeFingers[i] = (activeFingersVal & (1 << i)) ? 1 : 0;
+    }
+    
+    // Load required ROM
+    for (int i = 0; i < NUM_FINGERS; i++) {
+        char key[16];
+        sprintf(key, "rom_%d", i);
+        rx.requiredRom[i] = prefs.getInt(key, 0);
+    }
+    
+    // Load sequence
+    rx.sequenceCount = prefs.getInt("seqCount", 0);
+    for (int i = 0; i < NUM_FINGERS; i++) {
+        char key[16];
+        sprintf(key, "seq_%d", i);
+        rx.sequence[i] = prefs.getInt(key, 0);
+    }
+    
+    // Load cubes
+    rx.cubesCount = prefs.getInt("cubesCount", 0);
+    for (int i = 0; i < rx.cubesCount; i++) {
+        char keyUid[24], keyCol[24], keyShp[24], keyWgt[24];
+        sprintf(keyUid, "cube_uid_%d", i);
+        sprintf(keyCol, "cube_col_%d", i);
+        sprintf(keyShp, "cube_shp_%d", i);
+        sprintf(keyWgt, "cube_wgt_%d", i);
+        
+        rx.cubes[i].uid_len = prefs.getInt(keyUid + String("_len"), 0);
+        if (rx.cubes[i].uid_len > 0) {
+            prefs.getBytes(keyUid, rx.cubes[i].uid, rx.cubes[i].uid_len);
+        }
+        
+        String col = prefs.getString(keyCol, "");
+        String shp = prefs.getString(keyShp, "");
+        strncpy(rx.cubes[i].color, col.c_str(), sizeof(rx.cubes[i].color) - 1);
+        strncpy(rx.cubes[i].shape, shp.c_str(), sizeof(rx.cubes[i].shape) - 1);
+        rx.cubes[i].weightGrams = prefs.getInt(keyWgt, 0);
+    }
+    
+    prefs.end();
+    Serial.println("[NVS] Game prescription loaded from NVS successfully.");
+    return true;
+}
+
 struct GameSessionState {
     bool active = false;
     unsigned long startTime = 0;

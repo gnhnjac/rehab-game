@@ -126,6 +126,13 @@ void setup() {
     isCalibrated = preferences.getBool("is_calibrated", false);
     preferences.end();
 
+    // Load last persisted prescription from NVS if available
+    GamePrescription savedRx;
+    if (loadPrescriptionFromNVS(savedRx)) {
+        currentPrescription = savedRx;
+        Serial.printf("[Setup] Restored last game prescription. GameType: %d\n", currentPrescription.gameType);
+    }
+
     // Create a mutex to protect shared telemetry data across cores
     telemetryMutex = xSemaphoreCreateMutex();
 
