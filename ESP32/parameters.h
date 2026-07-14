@@ -54,8 +54,8 @@ typedef enum {
 } BoxCmdType;
 
 // --- DFPLAYER PIN CONFIGURATION (Main Box UART2) ---
-#define DFPLAYER_RX_PIN 16
-#define DFPLAYER_TX_PIN 17
+#define DFPLAYER_RX_PIN 17
+#define DFPLAYER_TX_PIN 16
 
 typedef enum {
     EVENT_NONE,

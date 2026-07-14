@@ -101,12 +101,12 @@ class GloveApiService {
     final query = <String, String>{
       'gameType': '${prescription.type.index + 1}',
       'cycles': '${prescription.cycles}',
-      'difficulty': prescription is CubesBoxesPrescription ? '${prescription.difficulty}' : '2',
     };
 
 
     switch (prescription) {
       case CubesBoxesPrescription p:
+        query['difficulty'] = '${p.difficulty}';
         query['timer'] = '${p.timerSeconds}';
         query['targetWeight'] = '${p.targetWeightGrams.round()}';
         if (cubes.isNotEmpty) {

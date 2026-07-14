@@ -123,29 +123,75 @@ void updateLeds() {
     }
 }
 
-// --- DFPLAYER MINI MP3 HARDWARE SERIAL SENDER ---
+// --- SERIAL MP3 PLAYER (CATALEX YX5300) HARDWARE SERIAL ---
+static const byte start_byte = 0x7E;
+static const byte end_byte = 0xEF;
+static const byte set_volume_CMD = 0x31;
+static const byte play_filename_CMD = 0x42;
+static const uint8_t select_SD_CMD[] = { 0x7E, 0x03, 0x35, 0x01, 0xEF };
+static const uint8_t reset_CMD[] = { 0x7E, 0x03, 0x35, 0x05, 0xEF };
+
+bool resetMp3() {
+    Serial.println("[Audio] MP3 RESET");
+    Serial2.flush();
+    for (int i = 0; i < 5; i++) {
+        Serial2.write(reset_CMD[i]);
+    }
+    delay(50);
+    return Serial2.available() > 0;
+}
+
+void selectSdCard() {
+    Serial.println("[Audio] MP3 Select SD Card");
+    for (int i = 0; i < 5; i++) {
+        Serial2.write(select_SD_CMD[i]);
+    }
+}
+
+void setVolume(byte volume) {
+    delay(20);
+    Serial.printf("[Audio] Set volume = %d of 30\n", volume);
+    Serial2.write(start_byte);
+    Serial2.write(0x03); // Length
+    Serial2.write(set_volume_CMD);
+    Serial2.write(volume);
+    Serial2.write(end_byte);
+    delay(20);
+}
+
+void playFilename(int8_t directory, int8_t file) {
+    Serial.printf("[Audio] Playing directory %d, file %d\n", directory, file);
+    Serial2.write(start_byte);
+    Serial2.write(0x04); // Length
+    Serial2.write(play_filename_CMD);
+    Serial2.write((byte)directory);
+    Serial2.write((byte)file);
+    Serial2.write(end_byte);
+    delay(20);
+}
+
 void setupAudio() {
     Serial2.begin(9600, SERIAL_8N1, DFPLAYER_RX_PIN, DFPLAYER_TX_PIN);
-    delay(500);
-    
-    // Set volume to 20
-    uint8_t vol_cmd[10] = { 0x7E, 0xFF, 0x06, 0x06, 0x00, 0x00, 20, 0xFE, 0xD5, 0xEF };
-    Serial2.write(vol_cmd, 10);
     delay(100);
+    if (resetMp3()) {
+        Serial.println("[Audio] reset MP3 success");
+    } else {
+        Serial.println("[Audio] reset MP3 fail");
+    }
+    selectSdCard();
+    delay(1200);
+    setVolume(15);
 }
 
 void playAudioTrack(uint8_t cmd, uint8_t high_arg, uint8_t low_arg) {
-    uint8_t cmd_buf[10] = { 0x7E, 0xFF, 0x06, cmd, 0x00, high_arg, low_arg, 0x00, 0x00, 0xEF };
-    uint16_t checksum = 0;
-    for (int i = 1; i < 7; i++) {
-        checksum += cmd_buf[i];
+    if (cmd == 0x06) {
+        // Set volume cmd (low_arg contains volume)
+        setVolume(low_arg);
     }
-    checksum = -checksum;
-    cmd_buf[7] = (uint8_t)(checksum >> 8);
-    cmd_buf[8] = (uint8_t)(checksum & 0xFF);
-    
-    Serial2.write(cmd_buf, 10);
-    Serial.printf("[DFPlayer] Playing command 0x%02X, Folder %d, Track %d\n", cmd, high_arg, low_arg);
+    else if (cmd == 0x0F) {
+        // Play folder/file cmd (high_arg contains folder, low_arg contains file)
+        playFilename(high_arg, low_arg);
+    }
 }
 
 // Send callback (Empty)
