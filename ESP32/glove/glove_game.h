@@ -67,6 +67,13 @@ struct GameSessionState {
     int targetBoxIndex = -1;
     uint8_t targetBoxMac[6] = {0};
     RxCube targetCube;
+
+    // Accumulators for metrics
+    float sumSteadyForce = 0;
+    int countSteadyForce = 0;
+    float maxBendRom = 0;
+    float sumHoldRom = 0;
+    int countHoldRom = 0;
 };
 
 // Global Game Variables
@@ -171,6 +178,18 @@ inline void selectNextCubesBoxesTarget() {
 // Start game session helper
 inline void startNewGameSession() {
     if (currentPrescription.gameType == GAME_NONE) return;
+
+    // Check if buffer is full (50 sessions) and offline (WiFi not connected)
+    if (getBufferedLogCount() >= 50 && WiFi.status() != WL_CONNECTED) {
+        Serial.println("[Game] Warning: Local log buffer is FULL (50 sessions) and offline. Cannot start session!");
+        playFailureSound(); // Audio warning
+        
+        // Visual warning: Flash red on all boxes
+        uint8_t broadcastMac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+        sendLedColorToBox(broadcastMac, 255, 0, 0); // Solid red
+        sendFailureBlinkToBoxes();
+        return; // Block starting a new session
+    }
     
     Serial.printf("[Game] Starting Game Session. Type: %d, Timer: %ds, Cycles: %d\n", 
                   currentPrescription.gameType, currentPrescription.timerSeconds, currentPrescription.totalCycles);
@@ -188,6 +207,11 @@ inline void startNewGameSession() {
     sessionState.holdStartTime = 0;
     sessionState.lastWarningTime = 0;
     sessionState.currentStepInSequence = 0;
+    sessionState.sumSteadyForce = 0;
+    sessionState.countSteadyForce = 0;
+    sessionState.maxBendRom = 0;
+    sessionState.sumHoldRom = 0;
+    sessionState.countHoldRom = 0;
     
     // Speak Hebrew verbal instruction
     playStartPrompt(currentPrescription.gameType, currentPrescription.difficulty);
@@ -257,6 +281,15 @@ inline void stopGameSession(bool completedSuccessfully) {
     }
     
     float avgForceOrRom = 0; // For Pinch or Bend
+    if (currentPrescription.gameType == GAME_PINCH) {
+        if (sessionState.countSteadyForce > 0) {
+            avgForceOrRom = sessionState.sumSteadyForce / sessionState.countSteadyForce;
+        } else {
+            avgForceOrRom = currentPrescription.targetWeightGrams; // Fallback
+        }
+    } else if (currentPrescription.gameType == GAME_BEND) {
+        avgForceOrRom = sessionState.maxBendRom;
+    }
     
     // Save locally for offline synchronization
     saveSessionResultLocally(
@@ -460,6 +493,18 @@ inline void updateGame() {
                 // Vibrate glove haptics to confirm grip target force
                 triggerHapticContinuous();
                 
+                // Filter out 2 seconds from the edges of the hold to clean movement noise
+                float elapsedHoldSec = (now - sessionState.holdStartTime) / 1000.0f;
+                float reqHoldSec = currentPrescription.requiredHoldTimeSeconds;
+                float filterSec = 2.0f;
+                if (reqHoldSec <= 4.0f) {
+                    filterSec = reqHoldSec * 0.25f; // 25% filter if hold time is short
+                }
+                if (elapsedHoldSec >= filterSec && elapsedHoldSec <= (reqHoldSec - filterSec)) {
+                    sessionState.sumSteadyForce += forceGrams;
+                    sessionState.countSteadyForce++;
+                }
+                
                 // Check if held long enough
                 if (now - sessionState.holdStartTime >= currentPrescription.requiredHoldTimeSeconds * 1000) {
                     Serial.println("[Game-Pinch] Successfully completed pinch hold!");
@@ -519,6 +564,11 @@ inline void updateGame() {
                 }
                 
                 triggerHapticContinuous();
+                
+                // Track max ROM reached during the hold state
+                if (flexPct > sessionState.maxBendRom) {
+                    sessionState.maxBendRom = flexPct;
+                }
                 
                 // Check hold duration
                 if (now - sessionState.holdStartTime >= currentPrescription.requiredHoldTimeSeconds * 1000) {

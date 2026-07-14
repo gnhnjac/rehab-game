@@ -289,6 +289,30 @@ inline void handleCommand() {
         pendingCommand.time = timeVal > 0 ? timeVal : 5;
         pendingCommand.pending = true;
         server.send(200, "text/plain", "Calibration command queued");
+    } else if (cmd == "identifyBox") {
+        int targetIdx = timeVal;
+        int idx = 0;
+        uint8_t targetMac[6] = {0};
+        bool found = false;
+        for (const auto& pair : boxRegistry) {
+            if (idx == targetIdx) {
+                memcpy(targetMac, pair.second.mac, 6);
+                found = true;
+                break;
+            }
+            idx++;
+        }
+        if (found) {
+            sendIdentifyToBox(targetMac);
+            server.send(200, "text/plain", "Identify command sent to box");
+        } else {
+            server.send(404, "text/plain", "Box index not found");
+        }
+    } else if (cmd == "ready" || cmd == "green_light") {
+        uint8_t broadcastMac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+        sendLedColorToBox(broadcastMac, 0, 255, 0); // Green light
+        playSuccessSound();
+        server.send(200, "text/plain", "Ready signal sent (green light)");
     } else {
         server.send(400, "text/plain", "Unsupported command");
     }

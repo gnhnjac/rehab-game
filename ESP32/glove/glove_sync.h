@@ -154,6 +154,24 @@ inline void syncBufferedLogs() {
     }
 }
 
+// Get count of buffered logs
+inline int getBufferedLogCount() {
+    File root = SPIFFS.open("/");
+    if (!root) return 0;
+    
+    int count = 0;
+    File file = root.openNextFile();
+    while (file) {
+        String filename = String(file.name());
+        if (filename.startsWith("log_") && filename.endsWith(".json")) {
+            count++;
+        }
+        file.close();
+        file = root.openNextFile();
+    }
+    return count;
+}
+
 // Global Preferences from glove.ino
 extern Preferences preferences;
 

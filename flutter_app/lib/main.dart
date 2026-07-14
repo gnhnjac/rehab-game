@@ -9,6 +9,10 @@ import 'services/telemetry_service.dart';
 import 'services/direct_telemetry_service.dart';
 import 'services/cube_registry.dart';
 import 'models/glove_telemetry.dart';
+import 'repositories/patient_repository_provider.dart';
+import 'screens/patient_list_screen.dart';
+import 'state/app_state.dart';
+import 'state/app_state_scope.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -47,28 +51,31 @@ class RehabGloveApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Rehab Glove Hub',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData.dark().copyWith(
-        scaffoldBackgroundColor: const Color(0xFF0D0E15),
-        colorScheme: const ColorScheme.dark(
-          primary: Color(0xFF8B5CF6),      // Cyber Purple
-          secondary: Color(0xFF10B981),    // Neon Emerald
-          surface: Color(0xFF141722),
-          background: Color(0xFF0D0E15),
-          error: Color(0xFFEF4444),
-        ),
-        cardTheme: CardThemeData(
-          color: const Color(0xFF141722),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
-            side: const BorderSide(color: Color(0xFF232A3D), width: 1),
+    return AppStateScope(
+      notifier: AppState(repository: PatientRepositoryProvider.getRepository())..loadPatients(),
+      child: MaterialApp(
+        title: 'Rehab Glove Hub',
+        debugShowCheckedModeBanner: false,
+        theme: ThemeData.dark().copyWith(
+          scaffoldBackgroundColor: const Color(0xFF0D0E15),
+          colorScheme: const ColorScheme.dark(
+            primary: Color(0xFF8B5CF6),      // Cyber Purple
+            secondary: Color(0xFF10B981),    // Neon Emerald
+            surface: Color(0xFF141722),
+            background: Color(0xFF0D0E15),
+            error: Color(0xFFEF4444),
           ),
-          elevation: 8,
+          cardTheme: CardThemeData(
+            color: const Color(0xFF141722),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: const BorderSide(color: Color(0xFF232A3D), width: 1),
+            ),
+            elevation: 8,
+          ),
         ),
+        home: const PatientListScreen(),
       ),
-      home: const DashboardScreen(),
     );
   }
 }

@@ -9,11 +9,11 @@ bool hapticEnabled = false;
 #include "glove_haptic.h"
 #include "glove_sensors.h"
 #include "glove_audio.h"
-#include "glove_game.h"
 #include "glove_firebase.h"
+#include "glove_sync.h"
+#include "glove_game.h"
 #include "glove_espnow.h"
 #include "glove_web_server.h"
-#include "glove_sync.h"
 
 // Shared telemetry state variables
 SensorTelemetryData sharedTelemetry;

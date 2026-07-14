@@ -1,0 +1,213 @@
+// ignore_for_file: deprecated_member_use
+import 'package:flutter/material.dart';
+
+import '../main.dart' show DashboardScreen;
+import '../state/app_state_scope.dart';
+import '../widgets/patient_avatar.dart';
+import 'box_calibration_screen.dart';
+import 'fsr_calibration_screen.dart';
+import 'patient_detail_screen.dart';
+import 'patient_form_screen.dart';
+
+class PatientListScreen extends StatelessWidget {
+  const PatientListScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final appState = AppStateScope.of(context);
+    final patients = appState.patients;
+    final activePatient = appState.activePatient;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Patients'),
+        actions: [
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.build_rounded),
+            tooltip: 'Calibration tools',
+            onSelected: (value) {
+              switch (value) {
+                case 'fsr':
+                  Navigator.push(context,
+                      MaterialPageRoute(builder: (_) => const FsrCalibrationScreen()));
+                case 'box':
+                  Navigator.push(context,
+                      MaterialPageRoute(builder: (_) => const BoxCalibrationScreen()));
+              }
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(
+                value: 'fsr',
+                child: Row(children: [
+                  Icon(Icons.scale_rounded, size: 18),
+                  SizedBox(width: 10),
+                  Text('FSR calibration'),
+                ]),
+              ),
+              PopupMenuItem(
+                value: 'box',
+                child: Row(children: [
+                  Icon(Icons.grid_view_rounded, size: 18),
+                  SizedBox(width: 10),
+                  Text('Box calibration'),
+                ]),
+              ),
+            ],
+          ),
+          IconButton(
+            icon: const Icon(Icons.sensors),
+            tooltip: 'Live Telemetry',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const DashboardScreen()),
+              );
+            },
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          Container(
+            margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(18),
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFF8B5CF6), Color(0xFF6D28D9)],
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF8B5CF6).withOpacity(0.35),
+                  blurRadius: 16,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.18),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Icon(Icons.groups_rounded, color: Colors.white, size: 26),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${patients.length} ${patients.length == 1 ? 'patient' : 'patients'} enrolled',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 17,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        activePatient != null
+                            ? 'Active: ${activePatient.name}'
+                            : 'No active patient selected',
+                        style: TextStyle(color: Colors.white.withOpacity(0.85), fontSize: 13),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: patients.isEmpty
+                ? const Center(
+                    child: Text('No patients yet — tap + to add one.'),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+                    itemCount: patients.length,
+                    itemBuilder: (context, index) {
+                      final patient = patients[index];
+                      final isActive = appState.activePatient?.id == patient.id;
+                      final avatarColor = colorForPatientId(patient.id);
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: isActive
+                                ? avatarColor.withOpacity(0.6)
+                                : const Color(0xFF232A3D),
+                          ),
+                        ),
+                        child: Material(
+                          color: isActive
+                              ? avatarColor.withOpacity(0.12)
+                              : const Color(0xFF141722),
+                          borderRadius: BorderRadius.circular(14),
+                          child: ListTile(
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            leading: PatientAvatar(id: patient.id, name: patient.name),
+                            title: Text(
+                              patient.name,
+                              style: const TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                            subtitle: Text([
+                              if (patient.age != null) 'Age ${patient.age}',
+                              if (patient.notes != null && patient.notes!.isNotEmpty)
+                                patient.notes!,
+                            ].join(' · ')),
+                            trailing: isActive
+                                ? Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 5,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: avatarColor,
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: const Text(
+                                      'Active',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  )
+                                : const Icon(Icons.chevron_right_rounded, color: Colors.grey),
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => PatientDetailScreen(patientId: patient.id),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const PatientFormScreen()),
+          );
+        },
+        child: const Icon(Icons.add),
+      ),
+    );
+  }
+}
