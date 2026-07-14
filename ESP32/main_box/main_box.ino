@@ -224,7 +224,7 @@ void OnDataRecv(const uint8_t * incoming_mac, const uint8_t *incomingData, int l
             }
             
             // Success audio chime on connection
-            playAudioTrack(0x0F, 4, 1); // Success chime
+            playAudioTrack(0x0F, 4, 12); // "התחבר בהצלחה" chime
         }
         last_received_from_glove = millis();
     }

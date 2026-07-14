@@ -222,14 +222,16 @@ inline void selectNextCubesBoxesTarget() {
     uint8_t r, g, b;
     colorToRgb(sessionState.targetCube.color, r, g, b);
     
-    // Turn off all box LEDs individually (reliable unicast)
+    // Turn off non-target box LEDs, and light up target box (reliable unicast)
+    // This prevents double-sending packet clashes or queue congestion on the target box!
     for (const auto& pair : boxRegistry) {
-        sendLedColorToBox(pair.second.mac, 0, 0, 0);
-        delay(10);
+        if (memcmp(pair.second.mac, sessionState.targetBoxMac, 6) == 0) {
+            sendLedColorToBox(pair.second.mac, r, g, b);
+        } else {
+            sendLedColorToBox(pair.second.mac, 0, 0, 0);
+        }
+        delay(15);
     }
-    
-    // Light up target box
-    sendLedColorToBox(sessionState.targetBoxMac, r, g, b);
     
     sessionState.lastActionTime = millis();
     Serial.printf("[Game] Target set: Box [");
@@ -290,18 +292,12 @@ inline void startNewGameSession() {
         uint8_t r, g, b;
         colorToRgb(sessionState.targetCube.color, r, g, b);
         
-        // Find if that cube is currently placed in a box
-        uint8_t broadcastMac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-        sendLedColorToBox(broadcastMac, 0, 0, 0);
-        delay(20);
-        
         // Find which box has the cube
         bool foundBox = false;
         for (const auto& pair : boxRegistry) {
             const RegisteredBox& box = pair.second;
             // Match UID or assume Box 0
             if (box.current_cube_len > 0) {
-                sendLedColorToBox(box.mac, r, g, b);
                 memcpy(sessionState.targetBoxMac, box.mac, 6);
                 foundBox = true;
                 break;
@@ -309,7 +305,16 @@ inline void startNewGameSession() {
         }
         if (!foundBox && !boxRegistry.empty()) {
             memcpy(sessionState.targetBoxMac, boxRegistry.begin()->second.mac, 6);
-            sendLedColorToBox(sessionState.targetBoxMac, r, g, b);
+        }
+        
+        // Light up target box and turn off all other boxes (unicast)
+        for (const auto& pair : boxRegistry) {
+            if (memcmp(pair.second.mac, sessionState.targetBoxMac, 6) == 0) {
+                sendLedColorToBox(pair.second.mac, r, g, b);
+            } else {
+                sendLedColorToBox(pair.second.mac, 0, 0, 0);
+            }
+            delay(15);
         }
     }
 }
