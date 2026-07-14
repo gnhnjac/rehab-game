@@ -40,13 +40,20 @@ class DirectTelemetryService implements TelemetryService {
     _failureCount = 0;
     _client = http.Client(); // Instantiate persistent client
     
-    // Start polling at ~12.5Hz (80ms) for high responsiveness
-    _pollingTimer = Timer.periodic(const Duration(milliseconds: 80), (timer) async {
+    // Start polling at ~6.6Hz (150ms) for high responsiveness and stability
+    _pollingTimer = Timer.periodic(const Duration(milliseconds: 150), (timer) async {
       if (_isPolling) return; // Prevent overlapping requests
       _isPolling = true;
       await _pollTelemetry();
       _isPolling = false;
     });
+  }
+
+  void _recreateClient() {
+    try {
+      _client?.close();
+    } catch (_) {}
+    _client = http.Client();
   }
 
   Future<void> _pollTelemetry() async {
@@ -56,7 +63,7 @@ class DirectTelemetryService implements TelemetryService {
       // Pass Keep-Alive header to reuse the TCP socket
       final response = await _client!.get(uri, headers: {
         'Connection': 'keep-alive',
-      }).timeout(const Duration(milliseconds: 800));
+      }).timeout(const Duration(milliseconds: 1000));
       
       if (response.statusCode == 200) {
         _failureCount = 0; // Reset consecutive failure counter
@@ -70,12 +77,14 @@ class DirectTelemetryService implements TelemetryService {
         _controller.add(telemetry);
       } else {
         _failureCount++;
+        _recreateClient(); // Recreate client on error to discard broken socket
         if (_failureCount >= 5) {
           _handleDisconnect("HTTP error: ${response.statusCode}");
         }
       }
     } catch (e) {
       _failureCount++;
+      _recreateClient(); // Recreate client on exception/timeout to discard broken socket
       if (_failureCount >= 5) {
         _handleDisconnect(e.toString());
       }
