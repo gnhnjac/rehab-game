@@ -32,13 +32,7 @@ extern String scanResultsHtml;
 extern SensorTelemetryData sharedTelemetry;
 extern SemaphoreHandle_t telemetryMutex;
 
-// Command queue to communicate from HTTP task to Core 1
-struct CommandEvent {
-    String cmd;
-    int time;
-    volatile bool pending;
-};
-extern CommandEvent pendingCommand;
+
 
 
 
@@ -301,10 +295,8 @@ inline void handleCommand() {
     Serial.printf("[Command] Received remote command: %s, time=%d\n", cmd.c_str(), timeVal);
     
     if (cmd == "calibrate") {
-        pendingCommand.cmd = cmd;
-        pendingCommand.time = timeVal > 0 ? timeVal : 5;
-        pendingCommand.pending = true;
-        server.send(200, "text/plain", "Calibration command queued");
+        Serial.println("[Command] Calibrate command received (bypassed on Glove, direct calibration used).");
+        server.send(200, "text/plain", "Calibration bypassed on Glove");
     } else if (cmd == "identifyBox") {
         int targetIdx = timeVal;
         int idx = 0;
@@ -399,25 +391,9 @@ inline void handleCalibrateSensor() {
     
     String sensorType = server.arg("sensorType");
     if (sensorType == "force") {
-        int fMin = server.arg("forceMin").toInt();
-        int fMax = server.arg("forceMax").toInt();
-        
-        if (fMin > 0 && fMax > 0) {
-            forceMin = fMin;
-            forceMax = fMax;
-            isCalibrated = true;
-            
-            preferences.begin("calib", false);
-            preferences.putInt("fo_min", fMin);
-            preferences.putInt("fo_max", fMax);
-            preferences.putBool("is_cal", isCalibrated);
-            preferences.end();
-            
-            Serial.printf("[Calib] Saved force limits: Min=%d, Max=%d\n", fMin, fMax);
-            server.send(200, "text/plain", "Force sensor limits saved");
-            return;
-        }
-        server.send(400, "text/plain", "Invalid force limits");
+        Serial.println("[Calib] Force sensor calibration requested (bypassed on Glove, direct grams used).");
+        server.send(200, "text/plain", "Force sensor calibration bypassed on Glove");
+        return;
     }
     else if (sensorType == "flex") {
         int fingerIdx = server.arg("fingerIndex").toInt();

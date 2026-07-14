@@ -8,8 +8,6 @@
 // --- calibration data ---
 extern int flexMin[NUM_FINGERS];
 extern int flexMax[NUM_FINGERS];
-extern int forceMin;
-extern int forceMax;
 extern bool isCalibrated;
 
 
@@ -264,11 +262,6 @@ inline void startNewGameSession() {
     sessionState.lastActionTime = millis();
     sessionState.isHolding = false;
     sessionState.holdStartTime = 0;
-    if (currentPrescription.gameType == GAME_PINCH && boxRegistry.empty()) {
-        sessionState.isHolding = true;
-        sessionState.holdStartTime = millis();
-        Serial.println("[Game-Pinch] Standalone mode: hold timer starts immediately.");
-    }
     sessionState.lastWarningTime = 0;
     sessionState.currentStepInSequence = 0;
     sessionState.sumSteadyForce = 0;
@@ -281,46 +274,41 @@ inline void startNewGameSession() {
     
     // Speak Hebrew verbal instruction
     playStartPrompt(currentPrescription.gameType, currentPrescription.difficulty);
-    sessionState.jingleResumeTime = millis() + 5500; // Let start instruction play, then start jingle
     
     // Initialize target box
     if (currentPrescription.gameType == GAME_CUBES_BOXES) {
         selectNextCubesBoxesTarget();
     } else if (currentPrescription.gameType == GAME_PINCH) {
-        // Light up the target box in target color to prompt lift
+        // Pinch game: Phase 0 — waiting for correct cube placement
+        sessionState.currentStepInSequence = 0;
+        
+        // Select target cube
         if (currentPrescription.cubesCount > 0) {
             sessionState.targetCube = currentPrescription.cubes[0];
         } else {
             strcpy(sessionState.targetCube.color, "Red");
             sessionState.targetCube.weightGrams = 100;
         }
-        uint8_t r, g, b;
-        colorToRgb(sessionState.targetCube.color, r, g, b);
         
-        // Find which box has the cube
+        // Find which box to use (first box with a cube, or first box)
         bool foundBox = false;
         for (const auto& pair : boxRegistry) {
-            const RegisteredBox& box = pair.second;
-            // Match UID or assume Box 0
-            if (box.current_cube_len > 0) {
-                memcpy(sessionState.targetBoxMac, box.mac, 6);
-                foundBox = true;
-                break;
-            }
-        }
-        if (!foundBox && !boxRegistry.empty()) {
-            memcpy(sessionState.targetBoxMac, boxRegistry.begin()->second.mac, 6);
+            memcpy(sessionState.targetBoxMac, pair.second.mac, 6);
+            foundBox = true;
+            break;
         }
         
-        // Light up target box and turn off all other boxes (unicast)
-        for (const auto& pair : boxRegistry) {
-            if (memcmp(pair.second.mac, sessionState.targetBoxMac, 6) == 0) {
-                sendLedColorToBox(pair.second.mac, r, g, b);
-            } else {
-                sendLedColorToBox(pair.second.mac, 0, 0, 0);
-            }
-            delay(15);
+        if (foundBox) {
+            // Light up target box
+            uint8_t r, g, b;
+            colorToRgb(sessionState.targetCube.color, r, g, b);
+            sendLedColorToBox(sessionState.targetBoxMac, r, g, b);
         }
+        
+        // Voice: "Place the correct weight in the box"
+        delay(3000); // Let start prompt finish
+        playTrack(2, 5); // 02/005.mp3
+        Serial.println("[Game-Pinch] Phase 0: Waiting for cube placement in box.");
     }
 }
 
@@ -412,6 +400,7 @@ inline void handleLocalNfcEvent(String cubeId, int boxIndex, bool isPlaced, cons
                     sessionState.totalResponseTimeMs += (millis() - sessionState.lastActionTime);
                     sessionState.currentCycle++;
                     
+                    playSuccessSound();
                     // Visual success: Turn correct box white for 1 second
                     sendLedColorToBox(boxMac, 255, 255, 255);
                     delay(1000);
@@ -446,6 +435,7 @@ inline void handleLocalNfcEvent(String cubeId, int boxIndex, bool isPlaced, cons
                     sessionState.totalResponseTimeMs += (millis() - sessionState.lastActionTime);
                     sessionState.currentCycle++;
                     
+                    playSuccessSound();
                     // Visual success: Turn correct box white for 1 second
                     sendLedColorToBox(boxMac, 255, 255, 255);
                     delay(1000);
@@ -481,6 +471,7 @@ inline void handleLocalNfcEvent(String cubeId, int boxIndex, bool isPlaced, cons
                     sessionState.totalResponseTimeMs += (millis() - sessionState.lastActionTime);
                     sessionState.currentCycle++;
                     
+                    playSuccessSound();
                     // Visual success: Turn correct box white for 1 second
                     sendLedColorToBox(boxMac, 255, 255, 255);
                     delay(1000);
@@ -507,39 +498,83 @@ inline void handleLocalNfcEvent(String cubeId, int boxIndex, bool isPlaced, cons
         }
     }
     else if (currentPrescription.gameType == GAME_PINCH) {
-        if (!isPlaced) {
-            // Cube was lifted
-            // Match the target cube
-            String rxTargetUid = "";
-            for (int j = 0; j < sessionState.targetCube.uid_len; j++) {
-                char hex[3];
-                sprintf(hex, "%02X", sessionState.targetCube.uid[j]);
-                rxTargetUid += hex;
+        // Phase 0: Waiting for cube placement
+        if (sessionState.currentStepInSequence == 0) {
+            if (isPlaced) {
+                // Cube placed in box — verify it's the correct one
+                String rxTargetUid = "";
+                for (int j = 0; j < sessionState.targetCube.uid_len; j++) {
+                    char hex[3];
+                    sprintf(hex, "%02X", sessionState.targetCube.uid[j]);
+                    rxTargetUid += hex;
+                }
+                
+                bool cubeMatch = (rxTargetUid.length() == 0 || rxTargetUid == cubeId);
+                if (cubeMatch) {
+                    Serial.println("[Game-Pinch] Correct cube placed. Phase 1: Waiting for lift.");
+                    sessionState.currentStepInSequence = 1;
+                    
+                    // Flash box white briefly to confirm placement
+                    sendLedColorToBox(boxMac, 255, 255, 255);
+                    delay(500);
+                    
+                    // Light box in target color 
+                    uint8_t r, g, b;
+                    colorToRgb(sessionState.targetCube.color, r, g, b);
+                    sendLedColorToBox(sessionState.targetBoxMac, r, g, b);
+                    
+                    // Voice: "Lift and hold for X seconds"
+                    int holdSec = currentPrescription.requiredHoldTimeSeconds;
+                    int trackNum = 5 + (holdSec / 5); // 5s→6, 10s→7, 15s→8, 20s→9, 25s→10, 30s→11
+                    if (trackNum < 6) trackNum = 6;
+                    if (trackNum > 11) trackNum = 11;
+                    playTrack(2, trackNum);
+                    Serial.printf("[Game-Pinch] Prompted: lift and hold for %d seconds (track 02/%03d).\n", holdSec, trackNum);
+                    
+                    triggerHapticClick();
+                } else {
+                    Serial.println("[Game-Pinch] Wrong cube placed.");
+                    playFailureSound();
+                }
             }
-            
-            if (rxTargetUid.length() == 0 || rxTargetUid == cubeId) {
-                Serial.println("[Game-Pinch] Correct cube lifted. Starting hold timer.");
+        }
+        // Phase 1: Cube is in box, waiting for lift
+        else if (sessionState.currentStepInSequence == 1) {
+            if (!isPlaced) {
+                // Cube lifted — start hold timer (Phase 2)
+                Serial.println("[Game-Pinch] Cube lifted! Phase 2: Hold timer started.");
+                sessionState.currentStepInSequence = 2;
                 sessionState.isHolding = true;
                 sessionState.holdStartTime = millis();
                 
-                // Turn off target box LED
+                // Turn off box LED while holding
                 sendLedColorToBox(sessionState.targetBoxMac, 0, 0, 0);
                 triggerHapticClick();
-            } else {
-                Serial.println("[Game-Pinch] Incorrect cube lifted.");
-                playFailureSound();
             }
-        } else {
-            // Cube returned to box
-            if (sessionState.isHolding) {
-                Serial.println("[Game-Pinch] Cube returned before hold time finished.");
+        }
+        // Phase 2: Cube is lifted, hold timer running
+        else if (sessionState.currentStepInSequence == 2) {
+            if (isPlaced) {
+                // Cube returned too early — failure
+                Serial.println("[Game-Pinch] Cube returned before hold time. Failure!");
                 sessionState.isHolding = false;
+                sessionState.failureCount++;
+                stopHapticContinuous();
                 playFailureSound();
                 
-                // Light up box LED again
+                // Go back to Phase 1 (cube is in box, wait for re-lift)
+                sessionState.currentStepInSequence = 1;
                 uint8_t r, g, b;
                 colorToRgb(sessionState.targetCube.color, r, g, b);
                 sendLedColorToBox(sessionState.targetBoxMac, r, g, b);
+                
+                // Re-prompt the lift instruction
+                int holdSec = currentPrescription.requiredHoldTimeSeconds;
+                int trackNum = 5 + (holdSec / 5);
+                if (trackNum < 6) trackNum = 6;
+                if (trackNum > 11) trackNum = 11;
+                delay(1500);
+                playTrack(2, trackNum);
             }
         }
     }
@@ -550,13 +585,6 @@ inline void updateGame() {
     if (!sessionState.active) return;
     
     unsigned long now = millis();
-    
-    // Resume background jingle if resume timer expired
-    if (sessionState.jingleResumeTime > 0 && now >= sessionState.jingleResumeTime) {
-        sessionState.jingleResumeTime = 0;
-        playTrack(4, 11); // Play "04/011.mp3" background jingle
-        Serial.println("[Game] Resuming background jingle.");
-    }
     
     // 1. Check timer expiration (only if timerSeconds is defined > 0)
     if (currentPrescription.timerSeconds > 0 && now >= sessionState.timerEndMillis) {
@@ -580,130 +608,83 @@ inline void updateGame() {
         }
     }
     
-    // 3. Monitor FSR force during Pinch Grip
+    // 3. Monitor hold timer during Pinch Grip (Phase 2 only — cube is lifted)
     if (currentPrescription.gameType == GAME_PINCH) {
-        if (sessionState.isHolding) {
-            int currentForceRaw = 0;
-            if (xSemaphoreTake(telemetryMutex, 0) == pdTRUE) {
-                currentForceRaw = sharedTelemetry.forceRaw;
-                xSemaphoreGive(telemetryMutex);
+        if (sessionState.currentStepInSequence == 2 && sessionState.isHolding) {
+            // Check if held long enough
+            if (now - sessionState.holdStartTime >= (unsigned long)currentPrescription.requiredHoldTimeSeconds * 1000) {
+                Serial.println("[Game-Pinch] Successfully held cube for required duration!");
+                
+                sessionState.successCount++;
+                sessionState.currentCycle++;
+                sessionState.isHolding = false;
+                
+                playSuccessSound();
+                sendSuccessFlashToBoxes();
+                
+                if (sessionState.currentCycle >= currentPrescription.totalCycles) {
+                    stopGameSession(true);
+                } else {
+                    // Next cycle: go back to Phase 0 (waiting for placement)
+                    sessionState.currentStepInSequence = 0;
+                    delay(1500);
+                    
+                    // Light box back up and prompt placement
+                    uint8_t r, g, b;
+                    colorToRgb(sessionState.targetCube.color, r, g, b);
+                    sendLedColorToBox(sessionState.targetBoxMac, r, g, b);
+                    playTrack(2, 5); // "Place the weight in the box"
+                    Serial.println("[Game-Pinch] Phase 0: Waiting for next cube placement.");
+                }
+            }
+        }
+    }
+    else if (currentPrescription.gameType == GAME_BEND) {
+        int maxFlexPct = 0;
+        if (xSemaphoreTake(telemetryMutex, 0) == pdTRUE) {
+            for (int i = 0; i < NUM_FINGERS; i++) {
+                if (sharedTelemetry.flexPercent[i] > maxFlexPct) {
+                    maxFlexPct = sharedTelemetry.flexPercent[i];
+                }
+            }
+            xSemaphoreGive(telemetryMutex);
+        }
+        
+        int targetRom = currentPrescription.requiredRom[0];
+        
+        if (maxFlexPct >= targetRom) {
+            if (!sessionState.isHolding) {
+                sessionState.isHolding = true;
+                sessionState.holdStartTime = now;
+                playHoldPrompt();
             }
             
-            float forceGrams = getFsrForceGrams(currentForceRaw);
+            triggerHapticContinuous();
             
-            if (forceGrams >= currentPrescription.targetWeightGrams) {
-                // Vibrate glove haptics to confirm grip target force
-                triggerHapticContinuous();
-                
-                // Filter out 2 seconds from the edges of the hold to clean movement noise
-                float elapsedHoldSec = (now - sessionState.holdStartTime) / 1000.0f;
-                float reqHoldSec = currentPrescription.requiredHoldTimeSeconds;
-                float filterSec = 2.0f;
-                if (reqHoldSec <= 4.0f) {
-                    filterSec = reqHoldSec * 0.25f; // 25% filter if hold time is short
-                }
-                if (elapsedHoldSec >= filterSec && elapsedHoldSec <= (reqHoldSec - filterSec)) {
-                    sessionState.sumSteadyForce += forceGrams;
-                    sessionState.countSteadyForce++;
-                }
-                
-                // Check if held long enough
-                if (now - sessionState.holdStartTime >= currentPrescription.requiredHoldTimeSeconds * 1000) {
-                    Serial.println("[Game-Pinch] Successfully completed pinch hold!");
-                    
-                    sessionState.successCount++;
-                    sessionState.currentCycle++;
-                    sessionState.isHolding = false;
-                    
-                    stopHapticContinuous();
-                    // playSuccessSound(); // Removed mid-game to prevent jingle interruption
-                    sendSuccessFlashToBoxes();
-                    
-                    if (sessionState.currentCycle >= currentPrescription.totalCycles) {
-                        stopGameSession(true);
-                    } else {
-                        // Light box LED back on, wait for next lift
-                        uint8_t r, g, b;
-                        colorToRgb(sessionState.targetCube.color, r, g, b);
-                        sendLedColorToBox(sessionState.targetBoxMac, r, g, b);
-                        sessionState.holdStartTime = millis();
-                    }
-                }
-            } else {
-                // Force too low
+            if (maxFlexPct > sessionState.maxBendRom) {
+                sessionState.maxBendRom = maxFlexPct;
+            }
+            
+            // Check hold duration
+            if (now - sessionState.holdStartTime >= currentPrescription.requiredHoldTimeSeconds * 1000) {
+                Serial.println("[Game-Bend] Cycle completed successfully!");
                 stopHapticContinuous();
+                playSuccessSound(); // Success chime upon cycle completion
+                sessionState.isHolding = false;
+                sessionState.successCount++;
+                sessionState.currentCycle++;
                 
-                // Every 2 seconds warning
-                if (now - sessionState.lastWarningTime >= 2000) {
-                    sessionState.lastWarningTime = now;
-                    playForceWarning(); // "Press harder"
+                if (sessionState.currentCycle >= currentPrescription.totalCycles) {
+                    stopGameSession(true);
+                } else {
+                    playStartPrompt(GAME_BEND, 1);
                 }
-                
-                // Reset continuous hold start timer
-                sessionState.holdStartTime = now;
             }
         } else {
             stopHapticContinuous();
-        }
-    }
-    // 4. Monitor flex sensors during Bend Grip
-    else if (currentPrescription.gameType == GAME_BEND) {
-        int activeFingerIndex = currentPrescription.sequence[sessionState.currentStepInSequence] - 1;
-        if (activeFingerIndex >= 0 && activeFingerIndex < NUM_FINGERS) {
-            int flexPct = 0;
-            if (xSemaphoreTake(telemetryMutex, 0) == pdTRUE) {
-                flexPct = sharedTelemetry.flexPercent[activeFingerIndex];
-                xSemaphoreGive(telemetryMutex);
-            }
-            
-            int targetRom = currentPrescription.requiredRom[activeFingerIndex];
-            
-            if (flexPct >= targetRom) {
-                if (!sessionState.isHolding) {
-                    sessionState.isHolding = true;
-                    sessionState.holdStartTime = now;
-                    playHoldPrompt();
-                }
-                
-                triggerHapticContinuous();
-                
-                // Track max ROM reached during the hold state
-                if (flexPct > sessionState.maxBendRom) {
-                    sessionState.maxBendRom = flexPct;
-                }
-                
-                // Check hold duration
-                if (now - sessionState.holdStartTime >= currentPrescription.requiredHoldTimeSeconds * 1000) {
-                    Serial.printf("[Game-Bend] Step %d (Finger %d) completed!\n", 
-                                  sessionState.currentStepInSequence, activeFingerIndex + 1);
-                    
-                    stopHapticContinuous();
-                    // playSuccessSound(); // Removed mid-game to prevent jingle interruption
-                    sessionState.isHolding = false;
-                    
-                    sessionState.currentStepInSequence++;
-                    if (sessionState.currentStepInSequence >= currentPrescription.sequenceCount) {
-                        // All fingers in sequence bent!
-                        sessionState.successCount++;
-                        sessionState.currentCycle++;
-                        sessionState.currentStepInSequence = 0; // reset sequence
-                        
-                        if (sessionState.currentCycle >= currentPrescription.totalCycles) {
-                            stopGameSession(true);
-                        } else {
-                            playStartPrompt(GAME_BEND, 1);
-                        }
-                    } else {
-                        // Prompt next finger in sequence
-                        playHoldPrompt();
-                    }
-                }
-            } else {
-                stopHapticContinuous();
-                if (sessionState.isHolding) {
-                    sessionState.isHolding = false;
-                    playFailureSound();
-                }
+            if (sessionState.isHolding) {
+                sessionState.isHolding = false;
+                playFailureSound();
             }
         }
     }

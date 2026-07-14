@@ -27,7 +27,7 @@ class FirestorePatientRepository implements PatientRepository {
     prescriptionsMap[GameType.pinch] = PinchPrescription(
       cycles: (pinch['cycles'] as num? ?? 10).toInt(),
       holdDurationSeconds: (pinch['requiredHoldTimeSeconds'] as num? ?? 5).toInt(),
-      targetForceGrams: (pinch['targetWeightGrams'] as num? ?? 500.0).toDouble(),
+      targetWeightGrams: (pinch['targetWeightGrams'] as num? ?? 100.0).toDouble(),
     );
 
     // 3. Bend
@@ -139,7 +139,7 @@ class FirestorePatientRepository implements PatientRepository {
       updateMap['prescription.pinch'] = {
         'cycles': prescription.cycles,
         'requiredHoldTimeSeconds': prescription.holdDurationSeconds,
-        'targetWeightGrams': prescription.targetForceGrams,
+        'targetWeightGrams': prescription.targetWeightGrams,
       };
     } else if (prescription is BendPrescription) {
       updateMap['prescription.bend'] = {

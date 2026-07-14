@@ -116,7 +116,7 @@ class GloveApiService {
         }
       case PinchPrescription p:
         query['holdTime'] = '${p.holdDurationSeconds}';
-        query['targetWeight'] = '${p.targetForceGrams.round()}';
+        query['targetWeight'] = '${p.targetWeightGrams.round()}';
       case BendPrescription p:
         query['holdTime'] = '${p.holdDurationSeconds}';
         // Broadcast the ROM target across all 5 fingers.

@@ -41,7 +41,7 @@ String prescriptionSummary(GamePrescription prescription) {
     case CubesBoxesPrescription p:
       return 'Cycles: ${p.cycles} · Timer: ${p.timerSeconds}s · Target weight: ${p.targetWeightGrams.toStringAsFixed(0)}g';
     case PinchPrescription p:
-      return 'Cycles: ${p.cycles} · Hold: ${p.holdDurationSeconds}s · Target force: ${p.targetForceGrams.toStringAsFixed(0)}g';
+      return 'Cycles: ${p.cycles} · Hold: ${p.holdDurationSeconds}s · Weight: ${p.targetWeightGrams.toStringAsFixed(0)}g';
     case BendPrescription p:
       return 'Cycles: ${p.cycles} · Hold: ${p.holdDurationSeconds}s · Target ROM: ${p.targetRomPercent.toStringAsFixed(0)}%';
   }

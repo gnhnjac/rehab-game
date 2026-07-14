@@ -30,7 +30,6 @@ bool isAPMode = false;
 String connectedSSID = "";
 IPAddress localIP;
 String scanResultsHtml = "";
-CommandEvent pendingCommand = {"", 5, false};
 
 bool ntpInitialized = false;
 BoxActionEvent eventQueue[MAX_PENDING_EVENTS];
@@ -40,8 +39,6 @@ volatile int queueTail = 0;
 int flexMin[NUM_FINGERS];
 int flexMax[NUM_FINGERS];
 float flexSmoothed[NUM_FINGERS];
-int forceMin = 4095;
-int forceMax = 0;
 float forceSmoothed = 0;
 bool isCalibrated = false;
 
@@ -157,21 +154,6 @@ void setup() {
 }
 
 void loop() {
-    // Process any deferred calibration commands from the web server
-    if (pendingCommand.pending) {
-        if (pendingCommand.cmd == "calibrate") {
-            // Set uncalibrated state before running blocking calibration so background task uploads it immediately
-            isCalibrated = false;
-            if (xSemaphoreTake(telemetryMutex, portMAX_DELAY) == pdTRUE) {
-                sharedTelemetry.calibrated = false;
-                xSemaphoreGive(telemetryMutex);
-            }
-            // Trigger the remote calibration with requested time
-            runSensorCalibration(pendingCommand.time);
-        }
-        pendingCommand.pending = false; // Reset command
-    }
-
     // Periodically clean up timed-out boxes
     checkBoxTimeouts();
 
@@ -179,36 +161,17 @@ void loop() {
     if (pendingButtonPress) {
         pendingButtonPress = false;
         
-        if (buttonPressIsLong) {
-            // Long press: start calibration at any time
-            Serial.println("[Button] Long press detected! Starting sensor calibration...");
-            isCalibrated = false;
-            if (xSemaphoreTake(telemetryMutex, portMAX_DELAY) == pdTRUE) {
-                sharedTelemetry.calibrated = false;
-                xSemaphoreGive(telemetryMutex);
-            }
-            runSensorCalibration(5); // 5-second calibration
+        // Handle physical button toggle: start/stop the last game prescription
+        if (sessionState.active) {
+            Serial.println("[Button] Button pressed: aborting game session.");
+            stopGameSession(false);
+        } 
+        else if (currentPrescription.gameType != GAME_NONE) {
+            Serial.println("[Button] Button pressed: starting game session.");
+            startNewGameSession();
         } 
         else {
-            // Short press: handle game start/stop
-            if (sessionState.active) {
-                Serial.println("[Button] Short press: aborting game session.");
-                stopGameSession(false);
-            } 
-            else if (currentPrescription.gameType != GAME_NONE) {
-                Serial.println("[Button] Short press: starting game session.");
-                startNewGameSession();
-            } 
-            else {
-                // If no prescription loaded, short press falls back to calibration
-                Serial.println("[Button] Short press: no prescription loaded, starting calibration...");
-                isCalibrated = false;
-                if (xSemaphoreTake(telemetryMutex, portMAX_DELAY) == pdTRUE) {
-                    sharedTelemetry.calibrated = false;
-                    xSemaphoreGive(telemetryMutex);
-                }
-                runSensorCalibration(5);
-            }
+            Serial.println("[Button] Button pressed: no active prescription loaded.");
         }
     }
 
@@ -216,65 +179,32 @@ void loop() {
     if (millis() - lastSampleTime >= sampleInterval) {
         lastSampleTime = millis();
         
-        if (isCalibrated) {
-            int flexRaw[NUM_FINGERS];
-            int flexPercent[NUM_FINGERS];
-            int forceRaw = 0;
-            int forcePercent = 0;
-            readAllSensors(flexRaw, flexPercent, forceRaw, forcePercent);
+        int flexRaw[NUM_FINGERS];
+        int flexPercent[NUM_FINGERS];
+        int forceRaw = 0;
+        int forcePercent = 0;
+        readAllSensors(flexRaw, flexPercent, forceRaw, forcePercent);
 
-            // Safely write the fresh readings to the shared structure
-            if (xSemaphoreTake(telemetryMutex, 0) == pdTRUE) {
-                sharedTelemetry.calibrated = true;
-                memcpy(sharedTelemetry.flexRaw, flexRaw, sizeof(flexRaw));
-                memcpy(sharedTelemetry.flexPercent, flexPercent, sizeof(flexPercent));
-                sharedTelemetry.forceRaw = forceRaw;
-                sharedTelemetry.forcePercent = forcePercent;
-                xSemaphoreGive(telemetryMutex);
-            }
+        // Safely write the fresh readings to the shared structure
+        if (xSemaphoreTake(telemetryMutex, 0) == pdTRUE) {
+            sharedTelemetry.calibrated = isCalibrated;
+            memcpy(sharedTelemetry.flexRaw, flexRaw, sizeof(flexRaw));
+            memcpy(sharedTelemetry.flexPercent, flexPercent, sizeof(flexPercent));
+            sharedTelemetry.forceRaw = forceRaw;
+            sharedTelemetry.forcePercent = forcePercent;
+            xSemaphoreGive(telemetryMutex);
+        }
 
-            // Print standard serial output for debugging at the print interval
-            if (millis() - lastPrintTime >= printInterval) {
-                lastPrintTime = millis();
-                Serial.print("Flex: [");
-                for (int i = 0; i < NUM_FINGERS; i++) {
-                    Serial.print(flexPercent[i]);
-                    if (i < NUM_FINGERS - 1) Serial.print("%, ");
-                }
-                Serial.printf("%%] | Force (FSR): %d%%\n", forcePercent);
-                printRegistry();
-            }
-        } 
-        else {
-            // Uncalibrated state - sample raw values so they display in calibration menu
-            int flexRaw[NUM_FINGERS];
-            int flexPercent[NUM_FINGERS] = {0};
-            int forceRaw = 0;
-            int forcePercent = 0;
-
+        // Print standard serial output for debugging at the print interval
+        if (millis() - lastPrintTime >= printInterval) {
+            lastPrintTime = millis();
+            Serial.print("Flex: [");
             for (int i = 0; i < NUM_FINGERS; i++) {
-                int raw = analogRead(flexPins[i]);
-                flexSmoothed[i] = (raw * filterWeight) + (flexSmoothed[i] * (1.0 - filterWeight));
-                flexRaw[i] = (int)flexSmoothed[i];
+                Serial.print(flexPercent[i]);
+                if (i < NUM_FINGERS - 1) Serial.print("%, ");
             }
-            int rawForce = analogRead(FORCE_PIN);
-            forceSmoothed = (rawForce * filterWeight) + (forceSmoothed * (1.0 - filterWeight));
-            forceRaw = (int)forceSmoothed;
-            forcePercent = (int)getFsrForceGrams(forceRaw);
-
-            if (xSemaphoreTake(telemetryMutex, 0) == pdTRUE) {
-                sharedTelemetry.calibrated = false;
-                memcpy(sharedTelemetry.flexRaw, flexRaw, sizeof(flexRaw));
-                memcpy(sharedTelemetry.flexPercent, flexPercent, sizeof(flexPercent));
-                sharedTelemetry.forceRaw = forceRaw;
-                sharedTelemetry.forcePercent = forcePercent;
-                xSemaphoreGive(telemetryMutex);
-            }
-            
-            if (millis() - lastPrintTime >= printInterval) {
-                lastPrintTime = millis();
-                Serial.println("[Glove] Awaiting sensor calibration. Press the button to begin.");
-            }
+            Serial.printf("%%] | Force (FSR): %d%%\n", forcePercent);
+            printRegistry();
         }
     }
     

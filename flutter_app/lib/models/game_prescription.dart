@@ -70,23 +70,23 @@ final class CubesBoxesPrescription extends GamePrescription {
 
 final class PinchPrescription extends GamePrescription {
   final int holdDurationSeconds;
-  final double targetForceGrams;
+  final double targetWeightGrams;
 
   const PinchPrescription({
     required super.cycles,
     required this.holdDurationSeconds,
-    required this.targetForceGrams,
+    required this.targetWeightGrams,
   }) : super(type: GameType.pinch);
 
   PinchPrescription copyWith({
     int? cycles,
     int? holdDurationSeconds,
-    double? targetForceGrams,
+    double? targetWeightGrams,
   }) {
     return PinchPrescription(
       cycles: cycles ?? this.cycles,
       holdDurationSeconds: holdDurationSeconds ?? this.holdDurationSeconds,
-      targetForceGrams: targetForceGrams ?? this.targetForceGrams,
+      targetWeightGrams: targetWeightGrams ?? this.targetWeightGrams,
     );
   }
 
@@ -94,7 +94,9 @@ final class PinchPrescription extends GamePrescription {
     return PinchPrescription(
       cycles: json['cycles'] as int,
       holdDurationSeconds: json['holdDurationSeconds'] as int,
-      targetForceGrams: (json['targetForceGrams'] as num).toDouble(),
+      targetWeightGrams: (json['targetWeightGrams'] as num?)?.toDouble() ??
+          (json['targetForceGrams'] as num?)?.toDouble() ??
+          100.0,
     );
   }
 
@@ -103,7 +105,7 @@ final class PinchPrescription extends GamePrescription {
         'type': 'pinch',
         'cycles': cycles,
         'holdDurationSeconds': holdDurationSeconds,
-        'targetForceGrams': targetForceGrams,
+        'targetWeightGrams': targetWeightGrams,
       };
 }
 

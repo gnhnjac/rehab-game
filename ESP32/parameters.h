@@ -172,9 +172,6 @@ struct GameSessionState {
     // Countdown tracking flags
     bool played10sPrompt = false;
     bool played5sPrompt = false;
-
-    // Jingle resume tracking
-    unsigned long jingleResumeTime = 0;
 };
 
 extern GameSessionState sessionState;

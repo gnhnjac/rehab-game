@@ -13,8 +13,13 @@ extern bool mainBoxRegistered;
 extern volatile bool pendingButtonPress;
 extern volatile bool buttonPressIsLong;
 
-// Forward declaration of local game event handler
+// Forward declaration of local game event handlers
 void handleLocalNfcEvent(String cubeId, int boxIndex, bool isPlaced, const uint8_t *boxMac);
+void selectNextCubesBoxesTarget();
+
+inline bool isMacZero(const uint8_t* mac) {
+    return mac[0] == 0 && mac[1] == 0 && mac[2] == 0 && mac[3] == 0 && mac[4] == 0 && mac[5] == 0;
+}
 
 
 
@@ -144,6 +149,12 @@ inline void OnDataRecv(const uint8_t * incoming_mac, const uint8_t *incomingData
                         Serial.println("[Glove] Error: Failed to add Box as peer.");
                     }
                 }
+                
+                if (sessionState.active && currentPrescription.gameType == GAME_CUBES_BOXES && 
+                    isMacZero(sessionState.targetBoxMac)) {
+                    Serial.println("[ESP-NOW] First box registered while game active. Selecting target box.");
+                    selectNextCubesBoxesTarget();
+                }
             } else {
                 Serial.println("[Glove] Error: Maximum box limit reached!");
                 return;
@@ -171,6 +182,12 @@ inline void OnDataRecv(const uint8_t * incoming_mac, const uint8_t *incomingData
             reply_msg.type = MSG_TYPE_HEARTBEAT;
             WiFi.macAddress(reply_msg.box_mac);
             esp_now_send(incoming_mac, (uint8_t *)&reply_msg, sizeof(reply_msg));
+
+            if (sessionState.active && currentPrescription.gameType == GAME_CUBES_BOXES && 
+                isMacZero(sessionState.targetBoxMac)) {
+                Serial.println("[ESP-NOW] Heartbeat from registered box while game active. Selecting target box.");
+                selectNextCubesBoxesTarget();
+            }
         } else {
             Serial.print("[Glove] Heartbeat received from UNREGISTERED Box: ");
             printMac(incoming_mac);

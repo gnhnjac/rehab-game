@@ -155,7 +155,7 @@ class _ExerciseControlScreenState extends State<ExerciseControlScreen> {
       case GameType.cubesBoxes:
         return 'Move the weighted cubes between the smart boxes before each cycle timer runs out.';
       case GameType.pinch:
-        return 'Pinch the sensor to reach the target force and hold it for the required time, once per cycle.';
+        return 'Place the correct weight cube in the box, then lift and hold it in the air for the required time.';
       case GameType.bend:
         return 'Bend your fingers to reach the target range of motion and hold, once per cycle.';
     }
@@ -302,7 +302,7 @@ class _ExerciseControlScreenState extends State<ExerciseControlScreen> {
                     : (widget.prescription.type == GameType.cubesBoxes ? 'Status' : 'Force'),
                 widget.prescription.type == GameType.bend
                     ? (t != null && t!.flex.percent.isNotEmpty
-                        ? '${(t!.flex.percent.reduce((a, b) => a + b) / t!.flex.percent.length).round()}%'
+                        ? '${t!.flex.percent.reduce((a, b) => a > b ? a : b)}%'
                         : '—')
                     : (widget.prescription.type == GameType.cubesBoxes
                         ? 'Active'
