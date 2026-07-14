@@ -66,20 +66,16 @@ class AppState extends ChangeNotifier {
       final forceMax = (cal['fo_max'] as num? ?? 0).toInt();
       
       final api = GloveApiService();
-      final List<Future> futures = [];
       for (int i = 0; i < 5; i++) {
         if (i < flexMin.length && i < flexMax.length) {
-          futures.add(api.calibrateFlex(
+          await api.calibrateFlex(
             fingerIndex: i,
             flexMin: flexMin[i],
             flexMax: flexMax[i],
-          ));
+          );
         }
       }
-      futures.add(api.calibrateForce(forceMin: forceMin, forceMax: forceMax));
-      
-      // Wait for all calibrations to finish concurrently
-      await Future.wait(futures);
+      await api.calibrateForce(forceMin: forceMin, forceMax: forceMax);
       
       await api.sendCommand("ready");
     } catch (e) {
