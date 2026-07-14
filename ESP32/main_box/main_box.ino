@@ -268,7 +268,10 @@ void checkHeartbeats() {
     AppMessage hbMsg;
     hbMsg.type = MSG_TYPE_HEARTBEAT;
     memcpy(hbMsg.box_mac, myMac, 6);
-    esp_now_send(gloveMac, (uint8_t *)&hbMsg, sizeof(hbMsg));
+    esp_err_t result = esp_now_send(gloveMac, (uint8_t *)&hbMsg, sizeof(hbMsg));
+    if (result != ESP_OK) {
+        Serial.printf("[Heartbeat] Error sending to Glove: 0x%02X\n", result);
+    }
     last_heartbeat_sent = now;
   }
   

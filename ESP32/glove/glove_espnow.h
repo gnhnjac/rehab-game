@@ -160,12 +160,19 @@ inline void OnDataRecv(const uint8_t * incoming_mac, const uint8_t *incomingData
         auto it = boxRegistry.find(boxKey);
         if (it != boxRegistry.end()) {
             it->second.last_seen = millis();
+            Serial.print("[Glove] Heartbeat received from Box: ");
+            printMac(incoming_mac);
+            Serial.println();
             
             // Reply with heartbeat response
             AppMessage reply_msg;
             reply_msg.type = MSG_TYPE_HEARTBEAT;
             WiFi.macAddress(reply_msg.box_mac);
             esp_now_send(incoming_mac, (uint8_t *)&reply_msg, sizeof(reply_msg));
+        } else {
+            Serial.print("[Glove] Heartbeat received from UNREGISTERED Box: ");
+            printMac(incoming_mac);
+            Serial.println();
         }
     }
     else if (msg.type == MSG_TYPE_EVENT) {
