@@ -1,4 +1,7 @@
 #pragma once
+#include <Arduino.h>
+#include <unordered_map>
+
 //user defined parameters
 
 // --- I2C CONFIGURATION FOR SENSORS/HAPTICS ---
@@ -33,17 +36,34 @@
 #define MAX_BOXES 8
 
 typedef enum {
-    MSG_TYPE_REGISTER,     // Box -> Glove: Request registration
-    MSG_TYPE_EVENT,        // Box -> Glove: NFC event
-    MSG_TYPE_ACK,          // Glove -> Box: Registration acknowledgment
-    MSG_TYPE_HEARTBEAT     // Bidirectional: Connection keep-alive
+    MSG_TYPE_REGISTER,      // Box -> Glove: Request registration (Secondary Box)
+    MSG_TYPE_REGISTER_MAIN, // Main Box -> Glove: Request registration (Main Box)
+    MSG_TYPE_EVENT,         // Box -> Glove: NFC event or button press
+    MSG_TYPE_ACK,           // Glove -> Box: Registration acknowledgment
+    MSG_TYPE_HEARTBEAT,     // Bidirectional: Connection keep-alive
+    MSG_TYPE_COMMAND        // Glove -> Box: Command packet (LED, audio, identify, etc.)
 } MsgType;
+
+// Glove -> Box commands (carried in event/uid fields of AppMessage)
+typedef enum {
+    BOX_CMD_SET_LED,       // Set LED to solid color (color in uid[0..2] as R, G, B)
+    BOX_CMD_FLASH_SUCCESS, // Trigger rainbow/random flash
+    BOX_CMD_FLASH_FAILURE, // Trigger red/white sync blink
+    BOX_CMD_IDENTIFY,      // Trigger identify flash
+    BOX_CMD_PLAY_AUDIO     // Play audio track (Folder in uid[0], Track in uid[1])
+} BoxCmdType;
+
+// --- DFPLAYER PIN CONFIGURATION (Main Box UART2) ---
+#define DFPLAYER_RX_PIN 16
+#define DFPLAYER_TX_PIN 17
 
 typedef enum {
     EVENT_NONE,
     EVENT_CUBE_ENTERED,
-    EVENT_CUBE_LEFT
+    EVENT_CUBE_LEFT,
+    EVENT_BUTTON_PRESSED   // Main Box -> Glove: Physical button pressed
 } CubeEventType;
+
 
 typedef struct {
     uint8_t type;            // MsgType (uint8_t to ensure size consistency)
@@ -52,5 +72,27 @@ typedef struct {
     uint8_t uid[MAX_CUBE_UID_LEN]; // NFC tag UID
     uint8_t uid_len;         // Length of UID (4 or 7 bytes)
 } __attribute__((packed)) AppMessage;
+
+struct RegisteredBox {
+    uint8_t mac[6];
+    uint8_t current_cube_uid[MAX_CUBE_UID_LEN];
+    uint8_t current_cube_len;
+    bool active;
+    unsigned long last_seen;
+};
+
+// Box registry extern declaration (defined in glove.ino)
+extern std::unordered_map<uint64_t, RegisteredBox> boxRegistry;
+
+// --- TELEMETRY SHARED DATA STRUCTURE ---
+typedef struct {
+    bool calibrated;
+    bool calibrating;
+    int time_remaining;
+    int flexRaw[NUM_FINGERS];
+    int flexPercent[NUM_FINGERS];
+    int forceRaw;
+    int forcePercent;
+} SensorTelemetryData;
 
 

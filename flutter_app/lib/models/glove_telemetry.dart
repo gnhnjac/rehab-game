@@ -69,15 +69,21 @@ class BoxAction {
 
 class GloveTelemetry {
   final bool calibrated;
+  final bool calibrating;
+  final int timeRemaining;
   final SensorGroup flex;
   final SensorGroup force;
   final List<BoxAction> boxActions;
+  final List<Map<String, String>> boxes;
 
   GloveTelemetry({
     required this.calibrated,
+    required this.calibrating,
+    required this.timeRemaining,
     required this.flex,
     required this.force,
     required this.boxActions,
+    required this.boxes,
   });
 
   factory GloveTelemetry.fromJson(Map<String, dynamic> json) {
@@ -96,27 +102,49 @@ class GloveTelemetry {
       });
     }
 
+    List<Map<String, String>> boxesList = [];
+    if (json['boxes'] != null) {
+      final List rawBoxes = json['boxes'] as List;
+      for (var box in rawBoxes) {
+        if (box is Map) {
+          boxesList.add({
+            'mac': (box['mac'] ?? '').toString(),
+            'cube': (box['cube'] ?? '').toString(),
+          });
+        }
+      }
+    }
+
     return GloveTelemetry(
       calibrated: json['calibrated'] ?? false,
+      calibrating: json['calibrating'] ?? false,
+      timeRemaining: json['time_remaining'] ?? json['timeRemaining'] ?? 0,
       flex: SensorGroup.fromJson(flexJson),
       force: SensorGroup.fromJson(forceJson),
       boxActions: boxActionsList,
+      boxes: boxesList,
     );
   }
 
   factory GloveTelemetry.uncalibrated() {
     return GloveTelemetry(
       calibrated: false,
+      calibrating: false,
+      timeRemaining: 0,
       flex: SensorGroup(raw: [], percent: []),
       force: SensorGroup(raw: [], percent: []),
       boxActions: [],
+      boxes: [],
     );
   }
 
   Map<String, dynamic> toJson() => {
     'calibrated': calibrated,
+    'calibrating': calibrating,
+    'time_remaining': timeRemaining,
     'flex': flex.toJson(),
     'force': force.toJson(),
     'weights': Map.fromEntries(boxActions.map((w) => MapEntry(w.cubeId, w.toJson()))),
+    'boxes': boxes,
   };
 }

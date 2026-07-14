@@ -8,7 +8,7 @@
 #include "glove_secrets.h"
 
 // Track time sync state
-bool ntpInitialized = false;
+extern bool ntpInitialized;
 
 // Queue structure to defer REST operations out of the ESP-NOW callback context
 struct BoxActionEvent {
@@ -19,9 +19,10 @@ struct BoxActionEvent {
 };
 
 #define MAX_PENDING_EVENTS 10
-BoxActionEvent eventQueue[MAX_PENDING_EVENTS];
-volatile int queueHead = 0;
-volatile int queueTail = 0;
+extern BoxActionEvent eventQueue[MAX_PENDING_EVENTS];
+extern volatile int queueHead;
+extern volatile int queueTail;
+
 
 inline bool pushEvent(const String& cubeId, uint32_t timestamp, bool isPlaced, int boxIndex) {
     int nextTail = (queueTail + 1) % MAX_PENDING_EVENTS;
@@ -205,4 +206,16 @@ inline void uploadBoxAction(const String& cubeId, uint32_t timestamp, bool isPla
     http.end();
 }
 
+inline void saveSessionResultLocally(int gameType, int successes, int failures, unsigned long avgRespTimeMs, float avgForceOrRom) {
+    Serial.println("\n===== GAME OVER LOGS =====");
+    Serial.printf("Game Type: %d\n", gameType);
+    Serial.printf("Success Count: %d\n", successes);
+    Serial.printf("Failure Count: %d\n", failures);
+    Serial.printf("Average Response Time: %lu ms\n", avgRespTimeMs);
+    Serial.printf("Average Force/ROM: %.2f\n", avgForceOrRom);
+    Serial.println("==========================\n");
+    Serial.println("[Offline Storage] Mock: Game session result printed to Serial. (Buffer storage delegated to Dara)");
+}
+
 #endif // GLOVE_FIREBASE_H
+

@@ -8,20 +8,54 @@ bool hapticEnabled = false;
 
 #include "glove_haptic.h"
 #include "glove_sensors.h"
+#include "glove_audio.h"
+#include "glove_game.h"
 #include "glove_firebase.h"
 #include "glove_espnow.h"
+#include "glove_web_server.h"
 
-// Thread-safe telemetry data structure shared between Cores
-struct SensorTelemetryData {
-    bool calibrated;
-    int flexRaw[NUM_FINGERS];
-    int flexPercent[NUM_FINGERS];
-    int forceRaw;
-    int forcePercent;
-};
-
+// Shared telemetry state variables
 SensorTelemetryData sharedTelemetry;
 SemaphoreHandle_t telemetryMutex;
+
+// Global definitions (declared extern in headers)
+std::unordered_map<uint64_t, RegisteredBox> boxRegistry;
+
+WebServer server(80);
+DNSServer dnsServer;
+Preferences preferences;
+bool isAPMode = false;
+String connectedSSID = "";
+IPAddress localIP;
+String scanResultsHtml = "";
+CommandEvent pendingCommand = {"", 5, false};
+
+bool ntpInitialized = false;
+BoxActionEvent eventQueue[MAX_PENDING_EVENTS];
+volatile int queueHead = 0;
+volatile int queueTail = 0;
+
+int flexMin[NUM_FINGERS];
+int flexMax[NUM_FINGERS];
+float flexSmoothed[NUM_FINGERS];
+int forceMin = 4095;
+int forceMax = 0;
+float forceSmoothed = 0;
+bool isCalibrated = false;
+
+// Global Game Variables
+GamePrescription currentPrescription;
+GameSessionState sessionState;
+
+// Piecewise linear force calibration coefficients (raw ADC -> grams)
+int fsrCalRaw[3] = {4095, 2000, 500};
+int fsrCalGrams[3] = {0, 100, 500};
+
+// Main Box wireless communication state
+uint8_t mainBoxMac[6] = {0};
+bool mainBoxRegistered = false;
+volatile bool pendingButtonPress = false;
+
 
 // Time tracking
 unsigned long lastPrintTime = 0;
@@ -37,6 +71,9 @@ void telemetryUploadTask(void* parameter) {
     for (;;) {
         // Sleep for a short duration to yield CPU to other Core 0 system tasks (like Wi-Fi stack)
         vTaskDelay(pdMS_TO_TICKS(20));
+
+        // Handle local HTTP / captive portal requests
+        handleNetworkRequests();
         
         // 1. Process any deferred Firebase BoxAction uploads from the ESP-NOW queue
         BoxActionEvent pendingEvent;
@@ -44,7 +81,8 @@ void telemetryUploadTask(void* parameter) {
             uploadBoxAction(pendingEvent.cubeId, pendingEvent.timestamp, pendingEvent.isPlaced, pendingEvent.boxIndex);
         }
 
-        // 2. Periodically upload live telemetry
+        // 2. Periodically upload live telemetry (Disabled to prevent blocking local HTTP requests)
+        /*
         if (millis() - lastUploadTime >= uploadInterval) {
             lastUploadTime = millis();
             
@@ -61,6 +99,7 @@ void telemetryUploadTask(void* parameter) {
                 uploadLiveTelemetry(false, nullptr, nullptr, 0, 0);
             }
         }
+        */
     }
 }
 
@@ -70,12 +109,32 @@ void setup() {
 
     Serial.begin(115200);
     delay(1000);
-    Serial.println("[Glove] Starting central server...");
+    Serial.println("[Glove] Central server starting...");
 
-    setupWifi();
+    setupNetwork();
     setupSensors();
     setupHaptic();
+    setupAudio(); // Initialize UART audio module
     setupEspNow();
+
+    // Load calibration coefficients from Preferences
+    preferences.begin("calibration", true);
+    fsrCalRaw[0] = preferences.getInt("fsr_r0", 4095);
+    fsrCalRaw[1] = preferences.getInt("fsr_r1", 2000);
+    fsrCalRaw[2] = preferences.getInt("fsr_r2", 500);
+    fsrCalGrams[0] = preferences.getInt("fsr_g0", 0);
+    fsrCalGrams[1] = preferences.getInt("fsr_g1", 100);
+    fsrCalGrams[2] = preferences.getInt("fsr_g2", 500);
+    
+    for (int i = 0; i < NUM_FINGERS; i++) {
+        char keyMin[16], keyMax[16];
+        sprintf(keyMin, "fl_min_%d", i);
+        sprintf(keyMax, "fl_max_%d", i);
+        flexMin[i] = preferences.getInt(keyMin, 0);
+        flexMax[i] = preferences.getInt(keyMax, 4095);
+    }
+    isCalibrated = preferences.getBool("is_calibrated", false);
+    preferences.end();
 
     // Create a mutex to protect shared telemetry data across cores
     telemetryMutex = xSemaphoreCreateMutex();
@@ -97,25 +156,46 @@ void setup() {
 }
 
 void loop() {
-    // Periodically clean up timed-out boxes
-    checkBoxTimeouts();
-
-    // Check calibration button
-    if (digitalRead(CALIBRATION_BUTTON_PIN) == LOW) {
-        delay(50); // Debounce
-        if (digitalRead(CALIBRATION_BUTTON_PIN) == LOW) {
-            while (digitalRead(CALIBRATION_BUTTON_PIN) == LOW) {
-                delay(10);
-            }
-            
+    // Process any deferred calibration commands from the web server
+    if (pendingCommand.pending) {
+        if (pendingCommand.cmd == "calibrate") {
             // Set uncalibrated state before running blocking calibration so background task uploads it immediately
             isCalibrated = false;
             if (xSemaphoreTake(telemetryMutex, portMAX_DELAY) == pdTRUE) {
                 sharedTelemetry.calibrated = false;
                 xSemaphoreGive(telemetryMutex);
             }
-            
-            runSensorCalibration();
+            // Trigger the remote calibration with requested time
+            runSensorCalibration(pendingCommand.time);
+        }
+        pendingCommand.pending = false; // Reset command
+    }
+
+    // Periodically clean up timed-out boxes
+    checkBoxTimeouts();
+
+    // Check calibration / start button (now triggered wirelessly via ESP-NOW from Main Box)
+    if (pendingButtonPress) {
+        pendingButtonPress = false;
+        
+        if (sessionState.active) {
+            // If game session is running, button stops it
+            Serial.println("[Button] Game session aborted by wireless button press.");
+            stopGameSession(false);
+        } 
+        else if (currentPrescription.gameType != GAME_NONE) {
+            // If prescription is loaded but game is not active, button starts it
+            Serial.println("[Button] Starting game session by wireless button press.");
+            startNewGameSession();
+        } 
+        else {
+            // Default calibration mode
+            isCalibrated = false;
+            if (xSemaphoreTake(telemetryMutex, portMAX_DELAY) == pdTRUE) {
+                sharedTelemetry.calibrated = false;
+                xSemaphoreGive(telemetryMutex);
+            }
+            runSensorCalibration(5); // Default 5 seconds
         }
     }
 
@@ -165,4 +245,7 @@ void loop() {
             }
         }
     }
+    
+    // Update active game logic state machines
+    updateGame();
 }
