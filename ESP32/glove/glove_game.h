@@ -81,8 +81,9 @@ inline void savePrescriptionToNVS(const GamePrescription& rx) {
     // Save cubes
     prefs.putInt("cubesCount", rx.cubesCount);
     for (int i = 0; i < rx.cubesCount; i++) {
-        char keyUid[24], keyCol[24], keyShp[24], keyWgt[24];
+        char keyUid[24], keyUidLen[24], keyCol[24], keyShp[24], keyWgt[24];
         sprintf(keyUid, "cube_uid_%d", i);
+        sprintf(keyUidLen, "cube_len_%d", i);
         sprintf(keyCol, "cube_col_%d", i);
         sprintf(keyShp, "cube_shp_%d", i);
         sprintf(keyWgt, "cube_wgt_%d", i);
@@ -90,7 +91,7 @@ inline void savePrescriptionToNVS(const GamePrescription& rx) {
         if (rx.cubes[i].uid_len > 0) {
             prefs.putBytes(keyUid, rx.cubes[i].uid, rx.cubes[i].uid_len);
         }
-        prefs.putInt(keyUid + String("_len"), rx.cubes[i].uid_len);
+        prefs.putInt(keyUidLen, rx.cubes[i].uid_len);
         prefs.putString(keyCol, rx.cubes[i].color);
         prefs.putString(keyShp, rx.cubes[i].shape);
         prefs.putInt(keyWgt, rx.cubes[i].weightGrams);
@@ -141,13 +142,14 @@ inline bool loadPrescriptionFromNVS(GamePrescription& rx) {
     // Load cubes
     rx.cubesCount = prefs.getInt("cubesCount", 0);
     for (int i = 0; i < rx.cubesCount; i++) {
-        char keyUid[24], keyCol[24], keyShp[24], keyWgt[24];
+        char keyUid[24], keyUidLen[24], keyCol[24], keyShp[24], keyWgt[24];
         sprintf(keyUid, "cube_uid_%d", i);
+        sprintf(keyUidLen, "cube_len_%d", i);
         sprintf(keyCol, "cube_col_%d", i);
         sprintf(keyShp, "cube_shp_%d", i);
         sprintf(keyWgt, "cube_wgt_%d", i);
         
-        rx.cubes[i].uid_len = prefs.getInt(keyUid + String("_len"), 0);
+        rx.cubes[i].uid_len = prefs.getInt(keyUidLen, 0);
         if (rx.cubes[i].uid_len > 0) {
             prefs.getBytes(keyUid, rx.cubes[i].uid, rx.cubes[i].uid_len);
         }
