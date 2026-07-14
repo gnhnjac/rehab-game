@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'repositories/patient_repository_provider.dart';
 import 'screens/patient_list_screen.dart';
+import 'services/cube_registry.dart';
+import 'services/box_registry.dart';
 import 'state/app_state.dart';
 import 'state/app_state_scope.dart';
 
@@ -33,12 +35,16 @@ void main() async {
   if (options != null) {
     try {
       await Firebase.initializeApp(options: options);
+      // Initialize registries for background Cloud Firestore syncing
+      await CubeRegistry.load();
+      await BoxRegistry.load();
     } catch (e) {
       debugPrint("Firebase init error: $e");
     }
   }
   runApp(const RehabGloveApp());
 }
+
 
 class RehabGloveApp extends StatelessWidget {
   const RehabGloveApp({super.key});
