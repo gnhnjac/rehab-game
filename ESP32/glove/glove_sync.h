@@ -43,8 +43,71 @@ inline void setupSPIFFS() {
     }
 }
 
+// Get count of buffered logs
+inline int getBufferedLogCount() {
+    File root = SPIFFS.open("/");
+    if (!root) return 0;
+    
+    int count = 0;
+    File file = root.openNextFile();
+    while (file) {
+        String filename = String(file.name());
+        if (filename.startsWith("/")) {
+            filename = filename.substring(1);
+        }
+        if (filename.startsWith("log_") && filename.endsWith(".json")) {
+            count++;
+        }
+        file.close();
+        file = root.openNextFile();
+    }
+    return count;
+}
+
+// Find and remove oldest log file to maintain circular buffer
+inline void removeOldestLog() {
+    File root = SPIFFS.open("/");
+    if (!root) return;
+    
+    String oldestFilename = "";
+    uint32_t oldestEpoch = 0xFFFFFFFF;
+    
+    File file = root.openNextFile();
+    while (file) {
+        String filename = String(file.name());
+        if (filename.startsWith("/")) {
+            filename = filename.substring(1);
+        }
+        if (filename.startsWith("log_") && filename.endsWith(".json")) {
+            int underscoreIdx = filename.indexOf('_');
+            int nextUnderscoreIdx = filename.indexOf('_', underscoreIdx + 1);
+            if (underscoreIdx != -1 && nextUnderscoreIdx != -1) {
+                String epochStr = filename.substring(underscoreIdx + 1, nextUnderscoreIdx);
+                uint32_t epoch = strtoul(epochStr.c_str(), NULL, 10);
+                if (epoch < oldestEpoch) {
+                    oldestEpoch = epoch;
+                    oldestFilename = "/" + filename;
+                }
+            }
+        }
+        file.close();
+        file = root.openNextFile();
+    }
+    
+    if (oldestFilename.length() > 0) {
+        SPIFFS.remove(oldestFilename);
+        Serial.printf("[SPIFFS] Circular buffer: Deleted oldest log: %s\n", oldestFilename.c_str());
+    }
+}
+
 // Buffer completed game session log locally to SPIFFS
 inline void bufferGameSessionLog(const String& patientId, const String& gameType, int successCount, int totalCycles, const String& metricsFieldsJson) {
+    // If the local log buffer is full, remove the oldest log to maintain circular buffer space
+    if (getBufferedLogCount() >= 50) {
+        Serial.println("[Buffer] Warning: Log buffer limit reached (50). Overwriting oldest log...");
+        removeOldestLog();
+    }
+
     uint32_t epoch = getEpochTime();
     String timestampRfc = formatRfc3339(epoch);
     String payload = buildFirestoreDocument(patientId, gameType, successCount, totalCycles, timestampRfc, metricsFieldsJson);
@@ -158,26 +221,7 @@ inline void syncBufferedLogs() {
     }
 }
 
-// Get count of buffered logs
-inline int getBufferedLogCount() {
-    File root = SPIFFS.open("/");
-    if (!root) return 0;
-    
-    int count = 0;
-    File file = root.openNextFile();
-    while (file) {
-        String filename = String(file.name());
-        if (filename.startsWith("/")) {
-            filename = filename.substring(1);
-        }
-        if (filename.startsWith("log_") && filename.endsWith(".json")) {
-            count++;
-        }
-        file.close();
-        file = root.openNextFile();
-    }
-    return count;
-}
+
 
 // Global Preferences from glove.ino
 extern Preferences preferences;

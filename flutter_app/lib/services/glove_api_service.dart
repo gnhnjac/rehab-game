@@ -101,12 +101,12 @@ class GloveApiService {
     final query = <String, String>{
       'gameType': '${prescription.type.index + 1}',
       'cycles': '${prescription.cycles}',
-      'difficulty': prescription is CubesBoxesPrescription ? '${prescription.difficulty}' : '2',
     };
 
 
     switch (prescription) {
       case CubesBoxesPrescription p:
+        query['difficulty'] = '${p.difficulty}';
         query['timer'] = '${p.timerSeconds}';
         query['targetWeight'] = '${p.targetWeightGrams.round()}';
         if (cubes.isNotEmpty) {
@@ -116,7 +116,7 @@ class GloveApiService {
         }
       case PinchPrescription p:
         query['holdTime'] = '${p.holdDurationSeconds}';
-        query['targetWeight'] = '${p.targetForceGrams.round()}';
+        query['targetWeight'] = '${p.targetWeightGrams.round()}';
       case BendPrescription p:
         query['holdTime'] = '${p.holdDurationSeconds}';
         // Broadcast the ROM target across all 5 fingers.
@@ -134,6 +134,16 @@ class GloveApiService {
         .timeout(const Duration(seconds: 3));
     if (response.statusCode != 200) {
       throw GloveApiException('active-prescription failed: HTTP ${response.statusCode} ${response.body}');
+    }
+  }
+
+  /// Sends a command to explicitly stop any running prescription game on the glove
+  Future<void> stopActivePrescription() async {
+    final response = await http
+        .post(_uri('/api/active-prescription', {'gameType': '0'}))
+        .timeout(const Duration(seconds: 3));
+    if (response.statusCode != 200) {
+      throw GloveApiException('stop-prescription failed: HTTP ${response.statusCode} ${response.body}');
     }
   }
 }

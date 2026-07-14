@@ -12,6 +12,9 @@
 // PN532 NFC reader
 Adafruit_PN532 nfc(SDA_PIN, SCL_PIN);
 
+// Explicitly instantiate HardwareSerial 2 for the MP3 module
+HardwareSerial MP3(2);
+
 // --- NEOPIXEL STRIP CONFIGURATION ---
 #define NEOPIXEL_PIN 13 // Change to your physical NeoPixel data GPIO pin
 #define NUM_PIXELS 8    // Change to the number of LEDs in your strip
@@ -123,29 +126,75 @@ void updateLeds() {
     }
 }
 
-// --- DFPLAYER MINI MP3 HARDWARE SERIAL SENDER ---
+// --- SERIAL MP3 PLAYER (CATALEX YX5300) HARDWARE SERIAL ---
+static const byte start_byte = 0x7E;
+static const byte end_byte = 0xEF;
+static const byte set_volume_CMD = 0x31;
+static const byte play_filename_CMD = 0x42;
+static const uint8_t select_SD_CMD[] = { 0x7E, 0x03, 0x35, 0x01, 0xEF };
+static const uint8_t reset_CMD[] = { 0x7E, 0x03, 0x35, 0x05, 0xEF };
+
+bool resetMp3() {
+    Serial.println("[Audio] MP3 RESET");
+    MP3.flush();
+    for (int i = 0; i < 5; i++) {
+        MP3.write(reset_CMD[i]);
+    }
+    delay(50);
+    return MP3.available() > 0;
+}
+
+void selectSdCard() {
+    Serial.println("[Audio] MP3 Select SD Card");
+    for (int i = 0; i < 5; i++) {
+        MP3.write(select_SD_CMD[i]);
+    }
+}
+
+void setVolume(byte volume) {
+    delay(20);
+    Serial.printf("[Audio] Set volume = %d of 30\n", volume);
+    MP3.write(start_byte);
+    MP3.write(0x03); // Length
+    MP3.write(set_volume_CMD);
+    MP3.write(volume);
+    MP3.write(end_byte);
+    delay(20);
+}
+
+void playFilename(int8_t directory, int8_t file) {
+    Serial.printf("[Audio] Playing directory %d, file %d\n", directory, file);
+    MP3.write(start_byte);
+    MP3.write(0x04); // Length
+    MP3.write(play_filename_CMD);
+    MP3.write((byte)directory);
+    MP3.write((byte)file);
+    MP3.write(end_byte);
+    delay(20);
+}
+
 void setupAudio() {
-    Serial2.begin(9600, SERIAL_8N1, DFPLAYER_RX_PIN, DFPLAYER_TX_PIN);
-    delay(500);
-    
-    // Set volume to 20
-    uint8_t vol_cmd[10] = { 0x7E, 0xFF, 0x06, 0x06, 0x00, 0x00, 20, 0xFE, 0xD5, 0xEF };
-    Serial2.write(vol_cmd, 10);
+    MP3.begin(9600, SERIAL_8N1, DFPLAYER_RX_PIN, DFPLAYER_TX_PIN);
     delay(100);
+    if (resetMp3()) {
+        Serial.println("[Audio] reset MP3 success");
+    } else {
+        Serial.println("[Audio] reset MP3 fail");
+    }
+    selectSdCard();
+    delay(1200);
+    setVolume(30);
 }
 
 void playAudioTrack(uint8_t cmd, uint8_t high_arg, uint8_t low_arg) {
-    uint8_t cmd_buf[10] = { 0x7E, 0xFF, 0x06, cmd, 0x00, high_arg, low_arg, 0x00, 0x00, 0xEF };
-    uint16_t checksum = 0;
-    for (int i = 1; i < 7; i++) {
-        checksum += cmd_buf[i];
+    if (cmd == 0x06) {
+        // Set volume cmd (low_arg contains volume)
+        setVolume(low_arg);
     }
-    checksum = -checksum;
-    cmd_buf[7] = (uint8_t)(checksum >> 8);
-    cmd_buf[8] = (uint8_t)(checksum & 0xFF);
-    
-    Serial2.write(cmd_buf, 10);
-    Serial.printf("[DFPlayer] Playing command 0x%02X, Folder %d, Track %d\n", cmd, high_arg, low_arg);
+    else if (cmd == 0x0F) {
+        // Play folder/file cmd (high_arg contains folder, low_arg contains file)
+        playFilename(high_arg, low_arg);
+    }
 }
 
 // Send callback (Empty)
@@ -178,7 +227,7 @@ void OnDataRecv(const uint8_t * incoming_mac, const uint8_t *incomingData, int l
             }
             
             // Success audio chime on connection
-            playAudioTrack(0x0F, 4, 1); // Success chime
+            playAudioTrack(0x0F, 4, 12); // "התחבר בהצלחה" chime
         }
         last_received_from_glove = millis();
     }
@@ -218,15 +267,18 @@ void checkHeartbeats() {
   if (!isRegistered) return;
   unsigned long now = millis();
   
-  if (now - last_heartbeat_sent > 1000) {
+  if (now - last_heartbeat_sent > 5000) {
     AppMessage hbMsg;
     hbMsg.type = MSG_TYPE_HEARTBEAT;
     memcpy(hbMsg.box_mac, myMac, 6);
-    esp_now_send(gloveMac, (uint8_t *)&hbMsg, sizeof(hbMsg));
+    esp_err_t result = esp_now_send(gloveMac, (uint8_t *)&hbMsg, sizeof(hbMsg));
+    if (result != ESP_OK) {
+        Serial.printf("[Heartbeat] Error sending to Glove: 0x%02X\n", result);
+    }
     last_heartbeat_sent = now;
   }
   
-  if (now - last_received_from_glove > 5000) {
+  if (now - last_received_from_glove > 15000) {
     Serial.println("Glove timeout. Lost registration. Re-searching...");
     isRegistered = false;
     esp_now_del_peer(gloveMac);
@@ -279,16 +331,38 @@ void sendNfcEvent(CubeEventType event, uint8_t *uid, uint8_t uidLen) {
     esp_now_send(gloveMac, (uint8_t *)&msg, sizeof(msg));
 }
 
-void sendButtonPressEvent() {
+void sendButtonPressEvent(bool isLongPress) {
     if (!isRegistered) return;
     AppMessage msg;
     msg.type = MSG_TYPE_EVENT;
     memcpy(msg.box_mac, myMac, 6);
     msg.event = EVENT_BUTTON_PRESSED;
-    msg.uid_len = 0;
-    memset(msg.uid, 0, MAX_CUBE_UID_LEN);
+    msg.uid_len = 1;
+    msg.uid[0] = isLongPress ? 1 : 0; // 1 = long press, 0 = short press
+    memset(msg.uid + 1, 0, MAX_CUBE_UID_LEN - 1);
     esp_now_send(gloveMac, (uint8_t *)&msg, sizeof(msg));
-    Serial.println("[Button] Transmitted button press event to Glove.");
+    Serial.printf("[Button] Transmitted button press event (Long=%d) to Glove.\n", isLongPress);
+}
+
+void checkButton() {
+    static bool lastButtonState = HIGH;
+    bool currentButtonState = digitalRead(BUTTON_PIN);
+    if (currentButtonState == LOW && lastButtonState == HIGH) {
+        delay(50); // debounce
+        if (digitalRead(BUTTON_PIN) == LOW) {
+            unsigned long pressStart = millis();
+            while (digitalRead(BUTTON_PIN) == LOW) {
+                delay(10);
+            }
+            unsigned long duration = millis() - pressStart;
+            if (duration > 1500) {
+                sendButtonPressEvent(true); // Long press -> Calibrate
+            } else {
+                sendButtonPressEvent(false); // Short press -> Start/Stop
+            }
+        }
+    }
+    lastButtonState = currentButtonState;
 }
 
 void setup(void) {
@@ -352,18 +426,7 @@ void loop(void) {
   checkHeartbeats();
 
   // Monitor physical button press
-  static bool lastButtonState = HIGH;
-  bool currentButtonState = digitalRead(BUTTON_PIN);
-  if (currentButtonState == LOW && lastButtonState == HIGH) {
-      delay(50); // debounce
-      if (digitalRead(BUTTON_PIN) == LOW) {
-          sendButtonPressEvent();
-          while (digitalRead(BUTTON_PIN) == LOW) {
-              delay(10);
-          }
-      }
-  }
-  lastButtonState = currentButtonState;
+  checkButton();
 
   // NFC scanning
   if (nfcFound) {
@@ -383,15 +446,7 @@ void loop(void) {
         if (!isRegistered) break;
 
         // Monitor button even while cube is present
-        bool btnState = digitalRead(BUTTON_PIN);
-        if (btnState == LOW && lastButtonState == HIGH) {
-            delay(50);
-            if (digitalRead(BUTTON_PIN) == LOW) {
-                sendButtonPressEvent();
-                while (digitalRead(BUTTON_PIN) == LOW) delay(10);
-            }
-        }
-        lastButtonState = btnState;
+        checkButton();
 
         delay(100);
         uint8_t pollUid[7];

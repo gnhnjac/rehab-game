@@ -184,8 +184,8 @@ void checkHeartbeats() {
 
   unsigned long now = millis();
 
-  // 1. Send heartbeat every 1 second
-  if (now - last_heartbeat_sent >= 1000) {
+  // 1. Send heartbeat every 5 seconds
+  if (now - last_heartbeat_sent >= 5000) {
     last_heartbeat_sent = now;
     AppMessage heartbeatMsg;
     heartbeatMsg.type = MSG_TYPE_HEARTBEAT;
@@ -197,8 +197,8 @@ void checkHeartbeats() {
     esp_now_send(gloveMac, (uint8_t *)&heartbeatMsg, sizeof(heartbeatMsg));
   }
 
-  // 2. Check for Glove timeout (5 seconds)
-  if (now - last_received_from_glove > 5000) {
+  // 2. Check for Glove timeout (15 seconds)
+  if (now - last_received_from_glove > 15000) {
     Serial.println("[Smart Box] Lost connection to Glove (heartbeat timeout). Unregistering...");
     isRegistered = false;
     
@@ -258,7 +258,11 @@ void sendNfcEvent(CubeEventType event, uint8_t *uid, uint8_t uidLen) {
         memcpy(msg.uid, uid, uidLen <= MAX_CUBE_UID_LEN ? uidLen : MAX_CUBE_UID_LEN);
     }
 
-    esp_now_send(gloveMac, (uint8_t *)&msg, sizeof(msg));
+    // Send 3 times with a short 20ms delay to guarantee packet receipt (redundancy)
+    for (int i = 0; i < 3; i++) {
+        esp_now_send(gloveMac, (uint8_t *)&msg, sizeof(msg));
+        delay(20);
+    }
 }
 
 void setup(void) {
@@ -359,12 +363,17 @@ void loop(void) {
       // Card is present. Poll it in a loop to detect when it leaves.
       int consecutiveFailures = 0;
       while (consecutiveFailures < 5) {
-        checkHeartbeats();
         if (!isRegistered) {
           break; // Lost Glove connection while card is present
         }
 
-        delay(100);
+        // Wait 100ms non-blockingly while running animations
+        unsigned long startPoll = millis();
+        while (millis() - startPoll < 100) {
+            updateLeds();
+            checkHeartbeats();
+            delay(10);
+        }
         
         uint8_t pollUid[7];
         uint8_t pollUidLength = 0;
@@ -392,6 +401,7 @@ void loop(void) {
     
     unsigned long startWait = millis();
     while (millis() - startWait < 5000 && isRegistered) {
+      updateLeds();
       checkHeartbeats();
       delay(50);
     }
@@ -403,6 +413,7 @@ void loop(void) {
 
     startWait = millis();
     while (millis() - startWait < 5000 && isRegistered) {
+      updateLeds();
       checkHeartbeats();
       delay(50);
     }

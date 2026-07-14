@@ -1,5 +1,5 @@
 import 'dart:math';
-
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/game_prescription.dart';
 import '../models/game_session.dart';
 
@@ -7,9 +7,32 @@ abstract class GameHistoryRepository {
   Future<List<GameSession>> getSessionsForPatient(String patientId);
 }
 
+class FirestoreGameHistoryRepository implements GameHistoryRepository {
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
+
+  @override
+  Future<List<GameSession>> getSessionsForPatient(String patientId) async {
+    try {
+      final snapshot = await _db
+          .collection('game_history')
+          .where('patientId', isEqualTo: patientId)
+          .get();
+
+      final list = snapshot.docs
+          .map((doc) => GameSession.fromFirestore(doc.id, doc.data()))
+          .toList();
+      
+      // Sort in-memory in descending order of timestamp to avoid requiring a composite index
+      list.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      return list;
+    } catch (e) {
+      return [];
+    }
+  }
+}
+
 /// In-memory history with a plausible upward-trending recovery curve, so the
-/// analytics charts render without a live Firestore backend. Swap for a
-/// Firestore-backed implementation (Dara's `streamGameHistory`) later.
+/// analytics charts render without a live Firestore backend.
 class MockGameHistoryRepository implements GameHistoryRepository {
   @override
   Future<List<GameSession>> getSessionsForPatient(String patientId) async {
@@ -56,6 +79,6 @@ class GameHistoryRepositoryProvider {
   static GameHistoryRepository? _instance;
 
   static GameHistoryRepository getRepository() {
-    return _instance ??= MockGameHistoryRepository();
+    return _instance ??= FirestoreGameHistoryRepository();
   }
 }

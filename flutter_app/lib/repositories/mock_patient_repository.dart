@@ -37,7 +37,7 @@ class MockPatientRepository implements PatientRepository {
       GameType.pinch: const PinchPrescription(
         cycles: 10,
         holdDurationSeconds: 5,
-        targetForceGrams: 500,
+        targetWeightGrams: 100,
       ),
       GameType.bend: const BendPrescription(
         cycles: 10,

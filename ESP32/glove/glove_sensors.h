@@ -13,8 +13,6 @@ extern int flexMin[NUM_FINGERS];
 extern int flexMax[NUM_FINGERS];
 extern float flexSmoothed[NUM_FINGERS];
 
-extern int forceMin;
-extern int forceMax;
 extern float forceSmoothed;
 
 extern bool isCalibrated;
@@ -23,7 +21,7 @@ extern int fsrCalGrams[3];
 
 
 inline float getFsrForceGrams(int raw) {
-    if (raw >= 4095) return 0.0f; // FSR idle state (unloaded)
+    if (raw >= 4000) return 0.0f; // FSR idle state (unloaded)
     float x = (float)raw;
     float grams = (((-1.47891421e-07 * x + 1.13881999e-03) * x + -2.84335776e+00) * x + 2.66788197e+03) + 100.0f;
     return grams < 0.0f ? 0.0f : grams; // Clamp negative values
@@ -48,8 +46,6 @@ inline void setupSensors() {
             flexMin[i] = preferences.getInt(keyMin, 0);
             flexMax[i] = preferences.getInt(keyMax, 4095);
         }
-        forceMin = preferences.getInt("fo_min", 4095);
-        forceMax = preferences.getInt("fo_max", 0);
         Serial.println("[Sensors] Calibration parameters loaded from NVS successfully.");
     } else {
         Serial.println("[Sensors] No valid calibration found in NVS. Using default bounds.");
@@ -57,8 +53,6 @@ inline void setupSensors() {
             flexMin[i] = 0;
             flexMax[i] = 4095;
         }
-        forceMin = 4095;
-        forceMax = 0;
     }
     preferences.end();
 

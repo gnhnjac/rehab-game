@@ -46,7 +46,7 @@ class _PrescriptionEditScreenState extends State<PrescriptionEditScreen> {
         _timerOrHoldController =
             TextEditingController(text: pinch.holdDurationSeconds.toString());
         _targetController =
-            TextEditingController(text: pinch.targetForceGrams.toStringAsFixed(0));
+            TextEditingController(text: pinch.targetWeightGrams.toStringAsFixed(0));
       case BendPrescription bend:
         _timerOrHoldController =
             TextEditingController(text: bend.holdDurationSeconds.toString());
@@ -104,7 +104,7 @@ class _PrescriptionEditScreenState extends State<PrescriptionEditScreen> {
         updated = pinch.copyWith(
           cycles: cycles,
           holdDurationSeconds: int.parse(_timerOrHoldController.text.trim()),
-          targetForceGrams: double.parse(_targetController.text.trim()),
+          targetWeightGrams: double.parse(_targetController.text.trim()),
         );
       case BendPrescription bend:
         updated = bend.copyWith(
@@ -134,7 +134,7 @@ class _PrescriptionEditScreenState extends State<PrescriptionEditScreen> {
         targetValidator = _validatePositiveDouble;
       case PinchPrescription _:
         timerOrHoldLabel = 'Hold duration (seconds)';
-        targetLabel = 'Target pinch force (grams)';
+        targetLabel = 'Target weight (grams)';
         targetValidator = _validatePositiveDouble;
       case BendPrescription _:
         timerOrHoldLabel = 'Hold duration (seconds)';

@@ -317,16 +317,32 @@ inline void handleSave() {
 // Registry is included via glove_espnow.h
 
 inline void handleTelemetry() {
+    RegistryLock lock;
     SensorTelemetryData localData;
     if (xSemaphoreTake(telemetryMutex, portMAX_DELAY) == pdTRUE) {
         localData = sharedTelemetry;
         xSemaphoreGive(telemetryMutex);
     }
     
+    int timeRemaining = 0;
+    if (sessionState.active) {
+        if (sessionState.timerEndMillis > millis()) {
+            timeRemaining = (sessionState.timerEndMillis - millis()) / 1000;
+        }
+    } else {
+        timeRemaining = localData.time_remaining;
+    }
+
     String json = "{";
     json += "\"calibrated\":" + String(localData.calibrated ? "true" : "false") + ",";
     json += "\"calibrating\":" + String(localData.calibrating ? "true" : "false") + ",";
-    json += "\"time_remaining\":" + String(localData.time_remaining) + ",";
+    json += "\"time_remaining\":" + String(timeRemaining) + ",";
+    json += "\"session_active\":" + String(sessionState.active ? "true" : "false") + ",";
+    json += "\"success_count\":" + String(sessionState.successCount) + ",";
+    json += "\"failure_count\":" + String(sessionState.failureCount) + ",";
+    json += "\"current_cycle\":" + String(sessionState.currentCycle) + ",";
+    json += "\"game_type\":" + String(currentPrescription.gameType) + ",";
+    json += "\"session_completed_success\":" + String(lastSessionCompletedSuccess ? "true" : "false") + ",";
     
     // flex group
     json += "\"flex\":{";
@@ -403,10 +419,8 @@ inline void handleCommand() {
     Serial.printf("[Command] Received remote command: %s, time=%d\n", cmd.c_str(), timeVal);
     
     if (cmd == "calibrate") {
-        pendingCommand.cmd = cmd;
-        pendingCommand.time = timeVal > 0 ? timeVal : 5;
-        pendingCommand.pending = true;
-        server.send(200, "text/plain", "Calibration command queued");
+        Serial.println("[Command] Calibrate command received (bypassed on Glove, direct calibration used).");
+        server.send(200, "text/plain", "Calibration bypassed on Glove");
     } else if (cmd == "identifyBox") {
         int targetIdx = timeVal;
         int idx = 0;
@@ -501,25 +515,9 @@ inline void handleCalibrateSensor() {
     
     String sensorType = server.arg("sensorType");
     if (sensorType == "force") {
-        int fMin = server.arg("forceMin").toInt();
-        int fMax = server.arg("forceMax").toInt();
-        
-        if (fMin > 0 && fMax > 0) {
-            forceMin = fMin;
-            forceMax = fMax;
-            isCalibrated = true;
-            
-            preferences.begin("calib", false);
-            preferences.putInt("fo_min", fMin);
-            preferences.putInt("fo_max", fMax);
-            preferences.putBool("is_cal", isCalibrated);
-            preferences.end();
-            
-            Serial.printf("[Calib] Saved force limits: Min=%d, Max=%d\n", fMin, fMax);
-            server.send(200, "text/plain", "Force sensor limits saved");
-            return;
-        }
-        server.send(400, "text/plain", "Invalid force limits");
+        Serial.println("[Calib] Force sensor calibration requested (bypassed on Glove, direct grams used).");
+        server.send(200, "text/plain", "Force sensor calibration bypassed on Glove");
+        return;
     }
     else if (sensorType == "flex") {
         int fingerIdx = server.arg("fingerIndex").toInt();
@@ -643,8 +641,34 @@ inline void handleActivePrescription() {
         }
     }
     
+    // Auto-populate sequence if omitted for BEND game
+    if (rx.gameType == GAME_BEND && rx.sequenceCount == 0) {
+        for (int i = 0; i < NUM_FINGERS; i++) {
+            if (rx.activeFingers[i] == 1) {
+                rx.sequence[rx.sequenceCount++] = i + 1;
+            }
+        }
+        if (rx.sequenceCount == 0) {
+            for (int i = 0; i < NUM_FINGERS; i++) {
+                rx.sequence[rx.sequenceCount++] = i + 1;
+            }
+        }
+    }
+    
+    if (rx.gameType == GAME_NONE) {
+        if (sessionState.active) {
+            stopGameSession(false);
+        }
+        currentPrescription = rx;
+        savePrescriptionToNVS(rx);
+        server.send(200, "text/plain", "Game stopped");
+        return;
+    }
+
     currentPrescription = rx;
-    Serial.printf("[Rx] Received game prescription. GameType: %d\n", rx.gameType);
+    savePrescriptionToNVS(rx); // Persist received prescription!
+    Serial.printf("[Rx] Received prescription: type=%d, cycles=%d, timer=%d, diff=%d, targetWeight=%d, holdTime=%d\n",
+                  rx.gameType, rx.totalCycles, rx.timerSeconds, rx.difficulty, rx.targetWeightGrams, rx.requiredHoldTimeSeconds);
     
     // Save to NVS persistently
     savePrescriptionToNVS(rx);

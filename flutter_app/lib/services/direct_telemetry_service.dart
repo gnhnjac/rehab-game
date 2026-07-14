@@ -9,6 +9,7 @@ class DirectTelemetryService implements TelemetryService {
   Timer? _pollingTimer;
   bool _isConnected = false;
   bool _isPolling = false;
+  int _failureCount = 0;
   
   final StreamController<GloveTelemetry> _controller = StreamController<GloveTelemetry>.broadcast();
   final StreamController<String> _logController = StreamController<String>.broadcast();
@@ -33,6 +34,7 @@ class DirectTelemetryService implements TelemetryService {
     if (_pollingTimer != null) return;
     
     _logController.add("[DirectTelemetry] Connecting to Glove at http://$gloveHost...");
+    _failureCount = 0;
     
     // Start polling at ~3.3Hz (300ms) to ensure connection stability
     _pollingTimer = Timer.periodic(const Duration(milliseconds: 300), (timer) async {
@@ -49,6 +51,7 @@ class DirectTelemetryService implements TelemetryService {
       final response = await http.get(uri).timeout(const Duration(seconds: 2));
       
       if (response.statusCode == 200) {
+        _failureCount = 0; // Reset consecutive failure counter
         if (!_isConnected) {
           _isConnected = true;
           _logController.add("[DirectTelemetry] Connected to Glove at $gloveHost");
@@ -58,17 +61,23 @@ class DirectTelemetryService implements TelemetryService {
         final telemetry = GloveTelemetry.fromJson(json);
         _controller.add(telemetry);
       } else {
-        _handleDisconnect("HTTP error: ${response.statusCode}");
+        _failureCount++;
+        if (_failureCount >= 3) {
+          _handleDisconnect("HTTP error: ${response.statusCode}");
+        }
       }
     } catch (e) {
-      _handleDisconnect(e.toString());
+      _failureCount++;
+      if (_failureCount >= 3) {
+        _handleDisconnect(e.toString());
+      }
     }
   }
 
   void _handleDisconnect(String reason) {
     if (_isConnected) {
       _isConnected = false;
-      _logController.add("[DirectTelemetry] Disconnected from Glove: $reason");
+      _logController.add("[DirectTelemetry] Disconnected from Glove (after 3 consecutive failures): $reason");
       _controller.add(GloveTelemetry.uncalibrated());
     }
   }

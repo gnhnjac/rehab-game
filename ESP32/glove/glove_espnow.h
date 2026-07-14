@@ -11,9 +11,15 @@ extern bool isAPMode;
 extern uint8_t mainBoxMac[6];
 extern bool mainBoxRegistered;
 extern volatile bool pendingButtonPress;
+extern volatile bool buttonPressIsLong;
 
-// Forward declaration of local game event handler
+// Forward declaration of local game event handlers
 void handleLocalNfcEvent(String cubeId, int boxIndex, bool isPlaced, const uint8_t *boxMac);
+void selectNextCubesBoxesTarget();
+
+inline bool isMacZero(const uint8_t* mac) {
+    return mac[0] == 0 && mac[1] == 0 && mac[2] == 0 && mac[3] == 0 && mac[4] == 0 && mac[5] == 0;
+}
 
 
 
@@ -64,6 +70,8 @@ inline void OnDataRecv(const uint8_t * incoming_mac, const uint8_t *incomingData
 
     AppMessage msg;
     memcpy(&msg, incomingData, sizeof(AppMessage));
+
+    RegistryLock lock;
 
     uint64_t boxKey = macToKey(incoming_mac);
 
@@ -141,6 +149,12 @@ inline void OnDataRecv(const uint8_t * incoming_mac, const uint8_t *incomingData
                         Serial.println("[Glove] Error: Failed to add Box as peer.");
                     }
                 }
+                
+                if (sessionState.active && currentPrescription.gameType == GAME_CUBES_BOXES && 
+                    isMacZero(sessionState.targetBoxMac)) {
+                    Serial.println("[ESP-NOW] First box registered while game active. Selecting target box.");
+                    selectNextCubesBoxesTarget();
+                }
             } else {
                 Serial.println("[Glove] Error: Maximum box limit reached!");
                 return;
@@ -159,18 +173,32 @@ inline void OnDataRecv(const uint8_t * incoming_mac, const uint8_t *incomingData
         auto it = boxRegistry.find(boxKey);
         if (it != boxRegistry.end()) {
             it->second.last_seen = millis();
+            Serial.print("[Glove] Heartbeat received from Box: ");
+            printMac(incoming_mac);
+            Serial.println();
             
             // Reply with heartbeat response
             AppMessage reply_msg;
             reply_msg.type = MSG_TYPE_HEARTBEAT;
             WiFi.macAddress(reply_msg.box_mac);
             esp_now_send(incoming_mac, (uint8_t *)&reply_msg, sizeof(reply_msg));
+
+            if (sessionState.active && currentPrescription.gameType == GAME_CUBES_BOXES && 
+                isMacZero(sessionState.targetBoxMac)) {
+                Serial.println("[ESP-NOW] Heartbeat from registered box while game active. Selecting target box.");
+                selectNextCubesBoxesTarget();
+            }
+        } else {
+            Serial.print("[Glove] Heartbeat received from UNREGISTERED Box: ");
+            printMac(incoming_mac);
+            Serial.println();
         }
     }
     else if (msg.type == MSG_TYPE_EVENT) {
         if (msg.event == EVENT_BUTTON_PRESSED) {
             Serial.println("[ESP-NOW] Physical button event from Main Box received.");
             pendingButtonPress = true;
+            buttonPressIsLong = (msg.uid_len > 0 && msg.uid[0] == 1);
             return;
         }
 
@@ -185,6 +213,12 @@ inline void OnDataRecv(const uint8_t * incoming_mac, const uint8_t *incomingData
         it->second.last_seen = millis(); // Refresh last seen on event
 
         if (msg.event == EVENT_CUBE_ENTERED) {
+            // Filter duplicate enter events if same cube is already registered in this box
+            if (it->second.current_cube_len == msg.uid_len &&
+                memcmp(it->second.current_cube_uid, msg.uid, msg.uid_len) == 0) {
+                return; // Ignore duplicate
+            }
+
             it->second.current_cube_len = msg.uid_len;
             memcpy(it->second.current_cube_uid, msg.uid, msg.uid_len);
 
@@ -212,6 +246,11 @@ inline void OnDataRecv(const uint8_t * incoming_mac, const uint8_t *incomingData
             triggerHapticClick();
         } 
         else if (msg.event == EVENT_CUBE_LEFT) {
+            // Filter duplicate leave events if no cube is currently registered in this box
+            if (it->second.current_cube_len == 0 && msg.uid_len == 0) {
+                return; // Ignore duplicate
+            }
+
             String cubeId = "";
             uint8_t len = msg.uid_len > 0 ? msg.uid_len : it->second.current_cube_len;
             uint8_t* sourceUid = msg.uid_len > 0 ? msg.uid : it->second.current_cube_uid;
@@ -244,9 +283,10 @@ inline void OnDataRecv(const uint8_t * incoming_mac, const uint8_t *incomingData
 
 // Timeout check function
 inline void checkBoxTimeouts() {
+    RegistryLock lock;
     unsigned long now = millis();
     for (auto it = boxRegistry.begin(); it != boxRegistry.end(); ) {
-        if (now - it->second.last_seen > 5000) {
+        if (now - it->second.last_seen > 15000) {
             Serial.print("[Glove] Heartbeat timeout. Unregistering Box [");
             printMac(it->second.mac);
             Serial.println("]");
@@ -328,8 +368,10 @@ inline void sendSuccessFlashToBoxes() {
     msg.event = BOX_CMD_FLASH_SUCCESS;
     msg.uid_len = 0;
     
-    uint8_t broadcastMac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-    esp_now_send(broadcastMac, (uint8_t *)&msg, sizeof(msg));
+    for (const auto& pair : boxRegistry) {
+        esp_now_send(pair.second.mac, (uint8_t *)&msg, sizeof(msg));
+        delay(10);
+    }
 }
 
 inline void sendFailureBlinkToBoxes() {
@@ -338,8 +380,10 @@ inline void sendFailureBlinkToBoxes() {
     msg.event = BOX_CMD_FLASH_FAILURE;
     msg.uid_len = 0;
     
-    uint8_t broadcastMac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-    esp_now_send(broadcastMac, (uint8_t *)&msg, sizeof(msg));
+    for (const auto& pair : boxRegistry) {
+        esp_now_send(pair.second.mac, (uint8_t *)&msg, sizeof(msg));
+        delay(10);
+    }
 }
 
 inline void sendIdentifyToBox(const uint8_t *mac) {
