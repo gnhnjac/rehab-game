@@ -550,12 +550,12 @@ inline void updateGame() {
         int secRemaining = (sessionState.timerEndMillis - now) / 1000;
         if (secRemaining <= 10 && secRemaining > 5 && !sessionState.played10sPrompt) {
             sessionState.played10sPrompt = true;
-            playAudioTrack(0x0F, 4, 9); // Play "עשר שניות" (04/009.mp3)
+            playTrack(4, 9); // Play "עשר שניות" (04/009.mp3)
             Serial.println("[Game] Spoken countdown: 10 seconds remaining.");
         }
         else if (secRemaining <= 5 && secRemaining > 0 && !sessionState.played5sPrompt) {
             sessionState.played5sPrompt = true;
-            playAudioTrack(0x0F, 4, 10); // Play "חמש שניות" (04/010.mp3)
+            playTrack(4, 10); // Play "חמש שניות" (04/010.mp3)
             Serial.println("[Game] Spoken countdown: 5 seconds remaining.");
         }
     }
