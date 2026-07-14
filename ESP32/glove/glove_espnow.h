@@ -7,16 +7,18 @@
 #include "../parameters.h"
 #include "glove_haptic.h"
 
-struct RegisteredBox {
-    uint8_t mac[6];
-    uint8_t current_cube_uid[MAX_CUBE_UID_LEN];
-    uint8_t current_cube_len;
-    bool active;
-    unsigned long last_seen;
-};
+extern bool isAPMode;
+extern uint8_t mainBoxMac[6];
+extern bool mainBoxRegistered;
+extern volatile bool pendingButtonPress;
 
-// Box registry using std::unordered_map (key is MAC packed as uint64_t for O(1) lookup)
-std::unordered_map<uint64_t, RegisteredBox> boxRegistry;
+// Forward declaration of local game event handler
+void handleLocalNfcEvent(String cubeId, int boxIndex, bool isPlaced, const uint8_t *boxMac);
+
+
+
+
+
 
 // Helper to print MAC address
 inline void printMac(const uint8_t *mac) {
@@ -54,6 +56,7 @@ inline void OnDataRecv(const esp_now_recv_info_t * recvInfo, const uint8_t *inco
 #else
 inline void OnDataRecv(const uint8_t * incoming_mac, const uint8_t *incomingData, int len) {
 #endif
+    if (isAPMode) return; // Ignore ESP-NOW communications in AP / configuration mode
     if (len < sizeof(AppMessage)) {
         Serial.println("Warning: Received packet too small!");
         return;
@@ -64,7 +67,48 @@ inline void OnDataRecv(const uint8_t * incoming_mac, const uint8_t *incomingData
 
     uint64_t boxKey = macToKey(incoming_mac);
 
-    if (msg.type == MSG_TYPE_REGISTER) {
+    if (msg.type == MSG_TYPE_REGISTER_MAIN) {
+        Serial.print("[ESP-NOW] Main Box registration request from: ");
+        printMac(incoming_mac);
+        Serial.println();
+
+        memcpy(mainBoxMac, incoming_mac, 6);
+        mainBoxRegistered = true;
+
+        esp_now_peer_info_t peerInfo;
+        memset(&peerInfo, 0, sizeof(peerInfo));
+        memcpy(peerInfo.peer_addr, incoming_mac, 6);
+        peerInfo.channel = 0;
+        peerInfo.encrypt = false;
+        peerInfo.ifidx = isAPMode ? WIFI_IF_AP : WIFI_IF_STA;
+
+        if (!esp_now_is_peer_exist(incoming_mac)) {
+            if (esp_now_add_peer(&peerInfo) != ESP_OK) {
+                Serial.println("[Glove] Error: Failed to add Main Box peer.");
+            }
+        }
+
+        // Register in standard registry too
+        auto it = boxRegistry.find(boxKey);
+        if (it == boxRegistry.end()) {
+            RegisteredBox newBox;
+            memcpy(newBox.mac, incoming_mac, 6);
+            newBox.active = true;
+            newBox.current_cube_len = 0;
+            memset(newBox.current_cube_uid, 0, MAX_CUBE_UID_LEN);
+            newBox.last_seen = millis();
+            boxRegistry[boxKey] = newBox;
+        } else {
+            it->second.last_seen = millis();
+        }
+
+        // Send ACK
+        AppMessage ack_msg;
+        ack_msg.type = MSG_TYPE_ACK;
+        WiFi.macAddress(ack_msg.box_mac);
+        esp_now_send(incoming_mac, (uint8_t *)&ack_msg, sizeof(ack_msg));
+    }
+    else if (msg.type == MSG_TYPE_REGISTER) {
         Serial.print("[ESP-NOW] Registration request from Box: ");
         printMac(incoming_mac);
         Serial.println();
@@ -90,6 +134,7 @@ inline void OnDataRecv(const uint8_t * incoming_mac, const uint8_t *incomingData
                 memcpy(peerInfo.peer_addr, incoming_mac, 6);
                 peerInfo.channel = 0;
                 peerInfo.encrypt = false;
+                peerInfo.ifidx = isAPMode ? WIFI_IF_AP : WIFI_IF_STA;
 
                 if (!esp_now_is_peer_exist(incoming_mac)) {
                     if (esp_now_add_peer(&peerInfo) != ESP_OK) {
@@ -123,6 +168,12 @@ inline void OnDataRecv(const uint8_t * incoming_mac, const uint8_t *incomingData
         }
     }
     else if (msg.type == MSG_TYPE_EVENT) {
+        if (msg.event == EVENT_BUTTON_PRESSED) {
+            Serial.println("[ESP-NOW] Physical button event from Main Box received.");
+            pendingButtonPress = true;
+            return;
+        }
+
         auto it = boxRegistry.find(boxKey);
         if (it == boxRegistry.end()) {
             Serial.print("[Glove] Warning: Received event from unregistered Box: ");
@@ -155,6 +206,9 @@ inline void OnDataRecv(const uint8_t * incoming_mac, const uint8_t *incomingData
                 Serial.println("[ESP-NOW] Warning: Event queue full, cube entered event dropped!");
             }
 
+            // Trigger local game state machine
+            handleLocalNfcEvent(cubeId, boxIndex, true, incoming_mac);
+
             triggerHapticClick();
         } 
         else if (msg.event == EVENT_CUBE_LEFT) {
@@ -181,6 +235,9 @@ inline void OnDataRecv(const uint8_t * incoming_mac, const uint8_t *incomingData
             if (!pushEvent(cubeId, timestamp, false, boxIndex)) {
                 Serial.println("[ESP-NOW] Warning: Event queue full, cube left event dropped!");
             }
+
+            // Trigger local game state machine
+            handleLocalNfcEvent(cubeId, boxIndex, false, incoming_mac);
         }
     }
 }
@@ -208,7 +265,6 @@ inline void checkBoxTimeouts() {
 }
 
 inline void setupEspNow() {
-    WiFi.mode(WIFI_STA);
     Serial.print("[Glove] MAC Address: ");
     Serial.println(WiFi.macAddress());
 
@@ -240,6 +296,70 @@ inline void printRegistry() {
         Serial.println();
     }
     Serial.println("--------------------------------");
+}
+
+// --- ESP-NOW GLOVE -> BOX COMMAND SENDER HELPERS ---
+inline void sendLedColorToBox(const uint8_t *mac, uint8_t r, uint8_t g, uint8_t b) {
+    AppMessage msg;
+    msg.type = MSG_TYPE_COMMAND;
+    msg.event = BOX_CMD_SET_LED;
+    msg.uid_len = 3;
+    msg.uid[0] = r;
+    msg.uid[1] = g;
+    msg.uid[2] = b;
+    
+    if (mac[0] != 0xFF) {
+        esp_now_peer_info_t peerInfo;
+        memset(&peerInfo, 0, sizeof(peerInfo));
+        memcpy(peerInfo.peer_addr, mac, 6);
+        peerInfo.channel = 0;
+        peerInfo.encrypt = false;
+        peerInfo.ifidx = isAPMode ? WIFI_IF_AP : WIFI_IF_STA;
+        if (!esp_now_is_peer_exist(mac)) {
+            esp_now_add_peer(&peerInfo);
+        }
+    }
+    esp_now_send(mac, (uint8_t *)&msg, sizeof(msg));
+}
+
+inline void sendSuccessFlashToBoxes() {
+    AppMessage msg;
+    msg.type = MSG_TYPE_COMMAND;
+    msg.event = BOX_CMD_FLASH_SUCCESS;
+    msg.uid_len = 0;
+    
+    uint8_t broadcastMac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    esp_now_send(broadcastMac, (uint8_t *)&msg, sizeof(msg));
+}
+
+inline void sendFailureBlinkToBoxes() {
+    AppMessage msg;
+    msg.type = MSG_TYPE_COMMAND;
+    msg.event = BOX_CMD_FLASH_FAILURE;
+    msg.uid_len = 0;
+    
+    uint8_t broadcastMac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    esp_now_send(broadcastMac, (uint8_t *)&msg, sizeof(msg));
+}
+
+inline void sendIdentifyToBox(const uint8_t *mac) {
+    AppMessage msg;
+    msg.type = MSG_TYPE_COMMAND;
+    msg.event = BOX_CMD_IDENTIFY;
+    msg.uid_len = 0;
+    
+    if (mac[0] != 0xFF) {
+        esp_now_peer_info_t peerInfo;
+        memset(&peerInfo, 0, sizeof(peerInfo));
+        memcpy(peerInfo.peer_addr, mac, 6);
+        peerInfo.channel = 0;
+        peerInfo.encrypt = false;
+        peerInfo.ifidx = isAPMode ? WIFI_IF_AP : WIFI_IF_STA;
+        if (!esp_now_is_peer_exist(mac)) {
+            esp_now_add_peer(&peerInfo);
+        }
+    }
+    esp_now_send(mac, (uint8_t *)&msg, sizeof(msg));
 }
 
 #endif

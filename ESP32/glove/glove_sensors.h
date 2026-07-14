@@ -9,19 +9,27 @@ const int flexPins[NUM_FINGERS] = {FLEX_PIN_1, FLEX_PIN_2, FLEX_PIN_3, FLEX_PIN_
 const float filterWeight = SENSOR_FILTER_WEIGHT;
 
 // State
-int flexMin[NUM_FINGERS];
-int flexMax[NUM_FINGERS];
-float flexSmoothed[NUM_FINGERS];
+extern int flexMin[NUM_FINGERS];
+extern int flexMax[NUM_FINGERS];
+extern float flexSmoothed[NUM_FINGERS];
 
-int forceMin = 4095;
-int forceMax = 0;
-float forceSmoothed = 0;
+extern int forceMin;
+extern int forceMax;
+extern float forceSmoothed;
 
+extern bool isCalibrated;
+extern int fsrCalRaw[3];
+extern int fsrCalGrams[3];
+
+
+inline float getFsrForceGrams(int raw) {
+    if (raw >= 4095) return 0.0f; // FSR idle state (unloaded)
+    float x = (float)raw;
+    float grams = (((-1.47891421e-07 * x + 1.13881999e-03) * x + -2.84335776e+00) * x + 2.66788197e+03) + 100.0f;
+    return grams < 0.0f ? 0.0f : grams; // Clamp negative values
+}
 #include <Preferences.h>
-
-Preferences preferences;
-bool isCalibrated = false;
-
+extern Preferences preferences;
 inline void setupSensors() {
     pinMode(CALIBRATION_BUTTON_PIN, INPUT_PULLUP);
     for (int i = 0; i < NUM_FINGERS; i++) {
@@ -50,11 +58,14 @@ inline void setupSensors() {
     forceSmoothed = analogRead(FORCE_PIN);
 }
 
-inline void runSensorCalibration() {
+extern SensorTelemetryData sharedTelemetry;
+extern SemaphoreHandle_t telemetryMutex;
+
+inline void runSensorCalibration(int seconds) {
     Serial.println("\n=================================");
     Serial.println("--- GLOVE SENSOR CALIBRATION ---");
     Serial.println("Fully FLEX and EXTEND all fingers, and SQUEEZE the force sensor.");
-    Serial.println("Calibration will run for 5 seconds...");
+    Serial.printf("Calibration will run for %d seconds...\n", seconds);
     Serial.println("=================================");
 
     // Reset/initialize limits
@@ -69,8 +80,23 @@ inline void runSensorCalibration() {
 
     unsigned long startTime = millis();
     unsigned long lastStatusPrint = 0;
+    unsigned long totalTimeMs = (unsigned long)seconds * 1000;
 
-    while (millis() - startTime < 5000) {
+    isCalibrated = false;
+
+    while (millis() - startTime < totalTimeMs) {
+        unsigned long elapsed = millis() - startTime;
+        int remaining = seconds - (elapsed / 1000);
+        if (remaining < 0) remaining = 0;
+
+        // Safely write countdown telemetry
+        if (xSemaphoreTake(telemetryMutex, 0) == pdTRUE) {
+            sharedTelemetry.calibrated = false;
+            sharedTelemetry.calibrating = true;
+            sharedTelemetry.time_remaining = remaining;
+            xSemaphoreGive(telemetryMutex);
+        }
+
         for (int i = 0; i < NUM_FINGERS; i++) {
             int raw = analogRead(flexPins[i]);
             flexSmoothed[i] = (raw * filterWeight) + (flexSmoothed[i] * (1.0 - filterWeight));
@@ -86,8 +112,7 @@ inline void runSensorCalibration() {
         if (rawForce > forceMax) forceMax = rawForce;
 
         if (millis() - lastStatusPrint >= 1000) {
-            int elapsedSec = (millis() - startTime) / 1000;
-            Serial.printf("Calibrating... %d/5s remaining\n", 5 - elapsedSec);
+            Serial.printf("Calibrating... %d seconds remaining\n", remaining);
             lastStatusPrint = millis();
         }
         delay(10);
@@ -102,13 +127,26 @@ inline void runSensorCalibration() {
     isCalibrated = true;
 
     // Save permanently to Preferences
-    preferences.begin("calib", false); // Read-write mode
-    preferences.putBytes("flexMin", flexMin, sizeof(flexMin));
-    preferences.putBytes("flexMax", flexMax, sizeof(flexMax));
-    preferences.putInt("forceMin", forceMin);
-    preferences.putInt("forceMax", forceMax);
-    preferences.putBool("isCalibrated", isCalibrated);
+    preferences.begin("calibration", false);
+    for (int i = 0; i < NUM_FINGERS; i++) {
+        char keyMin[16], keyMax[16];
+        sprintf(keyMin, "fl_min_%d", i);
+        sprintf(keyMax, "fl_max_%d", i);
+        preferences.putInt(keyMin, flexMin[i]);
+        preferences.putInt(keyMax, flexMax[i]);
+    }
+    preferences.putInt("fsr_r0", forceMin);
+    preferences.putInt("fsr_r2", forceMax);
+    preferences.putBool("is_calibrated", isCalibrated);
     preferences.end();
+    
+    // Safely write finished calibration state
+    if (xSemaphoreTake(telemetryMutex, 0) == pdTRUE) {
+        sharedTelemetry.calibrated = true;
+        sharedTelemetry.calibrating = false;
+        sharedTelemetry.time_remaining = 0;
+        xSemaphoreGive(telemetryMutex);
+    }
 
     Serial.println("--- CALIBRATION COMPLETE ---");
     for (int i = 0; i < NUM_FINGERS; i++) {

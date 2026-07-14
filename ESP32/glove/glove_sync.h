@@ -154,4 +154,45 @@ inline void syncBufferedLogs() {
     }
 }
 
+// Global Preferences from glove.ino
+extern Preferences preferences;
+
+inline void saveSessionResultLocally(int gameType, int successes, int failures, unsigned long avgRespTimeMs, float avgForceOrRom) {
+    Serial.println("\n===== GAME OVER LOGS =====");
+    Serial.printf("Game Type: %d\n", gameType);
+    Serial.printf("Success Count: %d\n", successes);
+    Serial.printf("Failure Count: %d\n", failures);
+    Serial.printf("Average Response Time: %lu ms\n", avgRespTimeMs);
+    Serial.printf("Average Force/ROM: %.2f\n", avgForceOrRom);
+    Serial.println("==========================\n");
+
+    // 1. Convert gameType to string
+    String gameTypeStr = "Unknown";
+    if (gameType == 1) gameTypeStr = "CubesBoxes";
+    else if (gameType == 2) gameTypeStr = "Pinch";
+    else if (gameType == 3) gameTypeStr = "Bend";
+
+    // 2. Read active patient ID from preferences (default to "OFFLINE_PATIENT")
+    preferences.begin("calibration", true); 
+    String patientId = preferences.getString("activePatientId", "OFFLINE_PATIENT");
+    preferences.end();
+
+    // 3. Construct the metrics JSON string in Firestore REST format
+    String metricsJson = "";
+    if (gameType == 1) { // CubesBoxes
+        metricsJson = "{\"avgResponseTimeSeconds\":{\"doubleValue\":" + String(avgRespTimeMs / 1000.0) + "},\"levelCompleted\":{\"integerValue\":\"" + String(successes) + "\"}}";
+    }
+    else if (gameType == 2) { // Pinch
+        metricsJson = "{\"avgSteadyStateForceGrams\":{\"doubleValue\":" + String(avgForceOrRom) + "},\"maxHoldTimeSeconds\":{\"doubleValue\":" + String(avgRespTimeMs / 1000.0) + "},\"succeeded\":{\"booleanValue\":true}}";
+    }
+    else if (gameType == 3) { // Bend
+        metricsJson = "{\"avgRomReached\":{\"arrayValue\":{\"values\":[{\"integerValue\":\"" + String((int)avgForceOrRom) + "\"}]}},\"sequenceCompleted\":{\"booleanValue\":true}}";
+    } else {
+        metricsJson = "{}";
+    }
+
+    // 4. Buffer the log to SPIFFS
+    bufferGameSessionLog(patientId, gameTypeStr, successes, successes + failures, metricsJson);
+}
+
 #endif // GLOVE_SYNC_H
