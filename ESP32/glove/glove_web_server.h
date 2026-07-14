@@ -579,6 +579,49 @@ inline void handleActivePrescription() {
         preferences.end();
     }
 
+    // Parse patient calibration values if provided
+    String flexMinStr = server.arg("flexMin");
+    String flexMaxStr = server.arg("flexMax");
+    String forceMinStr = server.arg("forceMin");
+    String forceMaxStr = server.arg("forceMax");
+    
+    if (flexMinStr.length() > 0 && flexMaxStr.length() > 0 && forceMinStr.length() > 0 && forceMaxStr.length() > 0) {
+        int idx = 0;
+        int startMin = 0;
+        int startMax = 0;
+        for (int i = 0; i <= flexMinStr.length() && idx < NUM_FINGERS; i++) {
+            if (i == flexMinStr.length() || flexMinStr.charAt(i) == ',') {
+                flexMin[idx++] = flexMinStr.substring(startMin, i).toInt();
+                startMin = i + 1;
+            }
+        }
+        idx = 0;
+        for (int i = 0; i <= flexMaxStr.length() && idx < NUM_FINGERS; i++) {
+            if (i == flexMaxStr.length() || flexMaxStr.charAt(i) == ',') {
+                flexMax[idx++] = flexMaxStr.substring(startMax, i).toInt();
+                startMax = i + 1;
+            }
+        }
+        forceMin = forceMinStr.toInt();
+        forceMax = forceMaxStr.toInt();
+        isCalibrated = true;
+        
+        preferences.begin("calib", false);
+        for (int i = 0; i < NUM_FINGERS; i++) {
+            char keyMin[16], keyMax[16];
+            sprintf(keyMin, "fl_min_%d", i);
+            sprintf(keyMax, "fl_max_%d", i);
+            preferences.putInt(keyMin, flexMin[i]);
+            preferences.putInt(keyMax, flexMax[i]);
+        }
+        preferences.putInt("fo_min", forceMin);
+        preferences.putInt("fo_max", forceMax);
+        preferences.putBool("is_cal", isCalibrated);
+        preferences.end();
+        
+        Serial.printf("[Rx] Updated runtime patient calibration. Force bounds: %d -> %d\n", forceMin, forceMax);
+    }
+
     startNewGameSession();
     
     server.send(200, "text/plain", "Prescription received and game session started");

@@ -120,6 +120,8 @@ class _FlexCalibrationScreenState extends State<FlexCalibrationScreen> {
         'fsr_coef_a': activePatient.calibration['fsr_coef_a'] ?? 0.0,
         'fsr_coef_b': activePatient.calibration['fsr_coef_b'] ?? 0.0,
         'fsr_coef_c': activePatient.calibration['fsr_coef_c'] ?? 0.0,
+        'fo_min': activePatient.calibration['fo_min'] ?? 4095,
+        'fo_max': activePatient.calibration['fo_max'] ?? 0,
       };
 
       await repo.updateCalibration(activePatient.id, calData);

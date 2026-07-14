@@ -96,12 +96,25 @@ class GloveApiService {
   Future<void> sendActivePrescription({
     required GamePrescription prescription,
     String? patientId,
+    Map<String, dynamic>? calibration,
     List<GloveCube> cubes = const [],
   }) async {
     final query = <String, String>{
       'gameType': '${prescription.type.index + 1}',
       'cycles': '${prescription.cycles}',
     };
+
+    if (calibration != null) {
+      final flexMin = (calibration['flex_min'] as List?)?.map((e) => e.toString()).join(',') ?? '0,0,0,0,0';
+      final flexMax = (calibration['flex_max'] as List?)?.map((e) => e.toString()).join(',') ?? '4095,4095,4095,4095,4095';
+      final forceMin = calibration['fo_min']?.toString() ?? '4095';
+      final forceMax = calibration['fo_max']?.toString() ?? '0';
+      
+      query['flexMin'] = flexMin;
+      query['flexMax'] = flexMax;
+      query['forceMin'] = forceMin;
+      query['forceMax'] = forceMax;
+    }
 
 
     switch (prescription) {

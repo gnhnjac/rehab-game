@@ -100,9 +100,11 @@ class _ExerciseControlScreenState extends State<ExerciseControlScreen> {
                 ))
             .toList();
       }
+      final activePatient = AppStateScope.of(context).activePatient;
       await _api.sendActivePrescription(
         prescription: widget.prescription,
         patientId: widget.patientId,
+        calibration: activePatient?.calibration,
         cubes: cubes,
       );
       if (!mounted) return;
