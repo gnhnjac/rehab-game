@@ -52,6 +52,14 @@ class AppState extends ChangeNotifier {
     await loadPatients();
   }
 
+  void updatePatientCalibrationLocally(String patientId, Map<String, dynamic> calibration) {
+    final idx = _patients.indexWhere((p) => p.id == patientId);
+    if (idx != -1) {
+      _patients[idx] = _patients[idx].copyWith(calibration: calibration);
+      notifyListeners();
+    }
+  }
+
   Future<void> setActivePatient(String patientId) async {
     _activePatientId = patientId;
     notifyListeners();

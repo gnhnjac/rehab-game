@@ -132,8 +132,8 @@ class _FlexCalibrationScreenState extends State<FlexCalibrationScreen> {
 
       await repo.updateCalibration(activePatient.id, calData);
       
-      // Update local app state patient data and push new calibration to the Glove
-      await appState.loadPatients();
+      // Update local app state patient data instantly and push new calibration to the Glove
+      appState.updatePatientCalibrationLocally(activePatient.id, calData);
       await appState.setActivePatient(activePatient.id);
 
       if (!mounted) return;

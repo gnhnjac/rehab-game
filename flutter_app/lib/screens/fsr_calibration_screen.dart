@@ -130,8 +130,8 @@ class _FsrCalibrationScreenState extends State<FsrCalibrationScreen> {
 
       await repo.updateCalibration(activePatient.id, calData);
       
-      // Sync local app state and push new calibration to the Glove
-      await appState.loadPatients();
+      // Sync local app state instantly and push new calibration to the Glove
+      appState.updatePatientCalibrationLocally(activePatient.id, calData);
       await appState.setActivePatient(activePatient.id);
 
       if (!mounted) return;
