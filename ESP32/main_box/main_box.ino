@@ -9,6 +9,7 @@
 
 #include <Adafruit_NeoPixel.h>
 
+// PN532 NFC reader
 Adafruit_PN532 nfc(SDA_PIN, SCL_PIN);
 
 // --- NEOPIXEL STRIP CONFIGURATION ---
@@ -16,6 +17,19 @@ Adafruit_PN532 nfc(SDA_PIN, SCL_PIN);
 #define NUM_PIXELS 8    // Change to the number of LEDs in your strip
 
 Adafruit_NeoPixel pixels(NUM_PIXELS, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
+
+// --- PHYSICAL BUTTON PIN CONFIGURATION ---
+#define BUTTON_PIN 4
+
+
+// State variables
+bool isRegistered = false;
+bool nfcFound = false;
+uint8_t gloveMac[6];
+uint8_t myMac[6];
+
+unsigned long last_received_from_glove = 0;
+unsigned long last_heartbeat_sent = 0;
 
 enum LedMode {
     LED_MODE_SOLID,
@@ -35,7 +49,6 @@ void writeLed(uint8_t r, uint8_t g, uint8_t b) {
     }
     pixels.show();
 }
-
 
 void setLedColor(uint8_t r, uint8_t g, uint8_t b) {
     currentLedMode = LED_MODE_SOLID;
@@ -72,7 +85,7 @@ void updateLeds() {
             lastLedUpdate = now;
             ledStep++;
             if (ledStep > 20) {
-                setLedColor(0, 0, 0); // Off after 2s
+                setLedColor(0, 0, 0);
             } else {
                 writeLed(random(0, 256), random(0, 256), random(0, 256));
             }
@@ -83,12 +96,12 @@ void updateLeds() {
             lastLedUpdate = now;
             ledStep++;
             if (ledStep > 10) {
-                setLedColor(0, 0, 0); // Off after 2s
+                setLedColor(0, 0, 0);
             } else {
                 if (ledStep % 2 == 0) {
-                    writeLed(255, 0, 0); // Red
+                    writeLed(255, 0, 0);
                 } else {
-                    writeLed(255, 255, 255); // White
+                    writeLed(255, 255, 255);
                 }
             }
         }
@@ -98,10 +111,10 @@ void updateLeds() {
             lastLedUpdate = now;
             ledStep++;
             if (ledStep > 20) {
-                setLedColor(0, 0, 0); // Off after 3s
+                setLedColor(0, 0, 0);
             } else {
                 if (ledStep % 2 == 0) {
-                    writeLed(0, 0, 255); // Blue
+                    writeLed(0, 0, 255);
                 } else {
                     writeLed(0, 0, 0);
                 }
@@ -110,20 +123,33 @@ void updateLeds() {
     }
 }
 
-
-// State variables
-bool isRegistered = false;
-bool nfcFound = false; // Flag to track if the PN532 was successfully initialized
-uint8_t gloveMac[6];
-uint8_t myMac[6];
-
-unsigned long last_received_from_glove = 0;
-unsigned long last_heartbeat_sent = 0;
-
-// Send callback (Empty, unused)
-void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
-  // Empty
+// --- DFPLAYER MINI MP3 HARDWARE SERIAL SENDER ---
+void setupAudio() {
+    Serial2.begin(9600, SERIAL_8N1, DFPLAYER_RX_PIN, DFPLAYER_TX_PIN);
+    delay(500);
+    
+    // Set volume to 20
+    uint8_t vol_cmd[10] = { 0x7E, 0xFF, 0x06, 0x06, 0x00, 0x00, 20, 0xFE, 0xD5, 0xEF };
+    Serial2.write(vol_cmd, 10);
+    delay(100);
 }
+
+void playAudioTrack(uint8_t cmd, uint8_t high_arg, uint8_t low_arg) {
+    uint8_t cmd_buf[10] = { 0x7E, 0xFF, 0x06, cmd, 0x00, high_arg, low_arg, 0x00, 0x00, 0xEF };
+    uint16_t checksum = 0;
+    for (int i = 1; i < 7; i++) {
+        checksum += cmd_buf[i];
+    }
+    checksum = -checksum;
+    cmd_buf[7] = (uint8_t)(checksum >> 8);
+    cmd_buf[8] = (uint8_t)(checksum & 0xFF);
+    
+    Serial2.write(cmd_buf, 10);
+    Serial.printf("[DFPlayer] Playing command 0x%02X, Folder %d, Track %d\n", cmd, high_arg, low_arg);
+}
+
+// Send callback (Empty)
+void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {}
 
 // Receive callback
 #if defined(ESP_ARDUINO_VERSION_MAJOR) && ESP_ARDUINO_VERSION_MAJOR >= 3
@@ -141,7 +167,6 @@ void OnDataRecv(const uint8_t * incoming_mac, const uint8_t *incomingData, int l
             isRegistered = true;
             memcpy(gloveMac, incoming_mac, 6);
             
-            // Register Glove as peer
             esp_now_peer_info_t peerInfo;
             memset(&peerInfo, 0, sizeof(peerInfo));
             memcpy(peerInfo.peer_addr, gloveMac, 6);
@@ -151,6 +176,9 @@ void OnDataRecv(const uint8_t * incoming_mac, const uint8_t *incomingData, int l
             if (!esp_now_is_peer_exist(gloveMac)) {
                 esp_now_add_peer(&peerInfo);
             }
+            
+            // Success audio chime on connection
+            playAudioTrack(0x0F, 4, 1); // Success chime
         }
         last_received_from_glove = millis();
     }
@@ -174,6 +202,13 @@ void OnDataRecv(const uint8_t * incoming_mac, const uint8_t *incomingData, int l
             else if (cmdType == BOX_CMD_IDENTIFY) {
                 triggerIdentifyFlash();
             }
+            else if (cmdType == BOX_CMD_PLAY_AUDIO) {
+                // Execute play command on local DFPlayer
+                uint8_t high = msg.uid[0];
+                uint8_t low = msg.uid[1];
+                uint8_t cmd = msg.uid[2];
+                playAudioTrack(cmd, high, low);
+            }
             last_received_from_glove = millis();
         }
     }
@@ -181,43 +216,31 @@ void OnDataRecv(const uint8_t * incoming_mac, const uint8_t *incomingData, int l
 
 void checkHeartbeats() {
   if (!isRegistered) return;
-
   unsigned long now = millis();
-
-  // 1. Send heartbeat every 1 second
-  if (now - last_heartbeat_sent >= 1000) {
+  
+  if (now - last_heartbeat_sent > 1000) {
+    AppMessage hbMsg;
+    hbMsg.type = MSG_TYPE_HEARTBEAT;
+    memcpy(hbMsg.box_mac, myMac, 6);
+    esp_now_send(gloveMac, (uint8_t *)&hbMsg, sizeof(hbMsg));
     last_heartbeat_sent = now;
-    AppMessage heartbeatMsg;
-    heartbeatMsg.type = MSG_TYPE_HEARTBEAT;
-    memcpy(heartbeatMsg.box_mac, myMac, 6);
-    heartbeatMsg.event = EVENT_NONE;
-    heartbeatMsg.uid_len = 0;
-    memset(heartbeatMsg.uid, 0, MAX_CUBE_UID_LEN);
-
-    esp_now_send(gloveMac, (uint8_t *)&heartbeatMsg, sizeof(heartbeatMsg));
   }
-
-  // 2. Check for Glove timeout (5 seconds)
+  
   if (now - last_received_from_glove > 5000) {
-    Serial.println("[Smart Box] Lost connection to Glove (heartbeat timeout). Unregistering...");
+    Serial.println("Glove timeout. Lost registration. Re-searching...");
     isRegistered = false;
-    
-    // Delete peer to free resources
-    if (esp_now_is_peer_exist(gloveMac)) {
-      esp_now_del_peer(gloveMac);
-    }
+    esp_now_del_peer(gloveMac);
   }
 }
 
 void connectToGlove() {
-  Serial.println("Searching for Glove across channels...");
   int channel = 1;
   while (!isRegistered) {
-    // Set current channel
+    Serial.printf("Scanning for Glove on channel %d...\n", channel);
     esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
     
     AppMessage regMsg;
-    regMsg.type = MSG_TYPE_REGISTER;
+    regMsg.type = MSG_TYPE_REGISTER_MAIN; // Identify as Main Box
     memcpy(regMsg.box_mac, myMac, 6);
     regMsg.event = EVENT_NONE;
     regMsg.uid_len = 0;
@@ -226,9 +249,6 @@ void connectToGlove() {
     uint8_t broadcastMac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
     esp_now_send(broadcastMac, (uint8_t *)&regMsg, sizeof(regMsg));
     
-    Serial.printf("Broadcasting registration request on channel %d...\n", channel);
-    
-    // Wait 250ms on this channel for ACK
     unsigned long startWait = millis();
     while (millis() - startWait < 250) {
       if (isRegistered) break;
@@ -240,14 +260,13 @@ void connectToGlove() {
       if (channel > 13) channel = 1;
     }
   }
-  Serial.printf("Registered with Glove. Locked on channel %d. Starting active loop...\n", channel);
+  Serial.printf("Registered Main Box with Glove. Channel: %d\n", channel);
   last_received_from_glove = millis();
   last_heartbeat_sent = millis();
 }
 
 void sendNfcEvent(CubeEventType event, uint8_t *uid, uint8_t uidLen) {
     if (!isRegistered) return;
-
     AppMessage msg;
     msg.type = MSG_TYPE_EVENT;
     memcpy(msg.box_mac, myMac, 6);
@@ -257,37 +276,40 @@ void sendNfcEvent(CubeEventType event, uint8_t *uid, uint8_t uidLen) {
     if (uid && uidLen > 0) {
         memcpy(msg.uid, uid, uidLen <= MAX_CUBE_UID_LEN ? uidLen : MAX_CUBE_UID_LEN);
     }
-
     esp_now_send(gloveMac, (uint8_t *)&msg, sizeof(msg));
 }
 
-void setup(void) {
-  // Disable the brownout detector to prevent power dips from resetting the chip
-  //WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
+void sendButtonPressEvent() {
+    if (!isRegistered) return;
+    AppMessage msg;
+    msg.type = MSG_TYPE_EVENT;
+    memcpy(msg.box_mac, myMac, 6);
+    msg.event = EVENT_BUTTON_PRESSED;
+    msg.uid_len = 0;
+    memset(msg.uid, 0, MAX_CUBE_UID_LEN);
+    esp_now_send(gloveMac, (uint8_t *)&msg, sizeof(msg));
+    Serial.println("[Button] Transmitted button press event to Glove.");
+}
 
+void setup(void) {
   Serial.begin(115200);
   delay(1000);
-  Serial.println("\n--- [Smart Box] Booting ---");
+  Serial.println("\n--- [Smart Box - Main] Booting ---");
 
   // Initialize NeoPixel Strip
   pixels.begin();
   writeLed(0, 0, 0); // Turn off
 
 
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
 
-  // 1. Initialize WiFi first (while PN532 is idle and drawing minimal current)
-  Serial.println("Starting WiFi...");
+  // Initialize DFPlayer Mini
+  setupAudio();
+
+  // Initialize WiFi & ESP-NOW
   WiFi.mode(WIFI_STA);
   WiFi.macAddress(myMac);
-  Serial.print("MAC Address: ");
-  for(int i=0; i<6; i++) {
-    Serial.printf("%02X", myMac[i]);
-    if (i < 5) Serial.print(":");
-  }
-  Serial.println();
-
-  // 2. Initialize ESP-NOW
-  Serial.println("Starting ESP-NOW...");
+  
   if (esp_now_init() != ESP_OK) {
     Serial.println("Error: Failed to initialize ESP-NOW!");
     while (1) delay(100);
@@ -302,38 +324,24 @@ void setup(void) {
   memcpy(peerInfo.peer_addr, broadcastMac, 6);
   peerInfo.channel = 0;
   peerInfo.encrypt = false;
-  
-  if (esp_now_add_peer(&peerInfo) != ESP_OK) {
-    Serial.println("Error: Failed to add broadcast peer!");
-  }
+  esp_now_add_peer(&peerInfo);
 
-  delay(500); // Let WiFi current draw stabilize
-
-  // 3. Initialize PN532 (staggered to avoid overlapping startup power surges)
-  Serial.println("Looking for PN532...");
+  // Initialize PN532
   nfc.begin();
-
   uint32_t versiondata = nfc.getFirmwareVersion();
   if (!versiondata) {
-    Serial.println("WARNING: Didn't find PN532 board. Check your wiring!");
-    Serial.println("Running in Wi-Fi simulation mode (sending mock events)...");
+    Serial.println("WARNING: PN532 not found. Simulated NFC active.");
     nfcFound = false;
   } else {
     nfcFound = true;
-    Serial.print("Found chip PN532 "); 
-    Serial.println((versiondata >> 24) & 0xFF, HEX); 
-    Serial.print("Firmware ver. "); 
-    Serial.print((versiondata >> 16) & 0xFF, DEC); 
-    Serial.print('.'); Serial.println((versiondata >> 8) & 0xFF, DEC);
     nfc.SAMConfig();
   }
 
-  // 4. Dynamic registration
+  // Register with Glove
   connectToGlove();
 }
 
 void loop(void) {
-  // Run non-blocking LED animations
   updateLeds();
 
   if (!isRegistered) {
@@ -341,70 +349,63 @@ void loop(void) {
     return;
   }
 
-  // Handle heartbeat sending and timeout checking
   checkHeartbeats();
 
+  // Monitor physical button press
+  static bool lastButtonState = HIGH;
+  bool currentButtonState = digitalRead(BUTTON_PIN);
+  if (currentButtonState == LOW && lastButtonState == HIGH) {
+      delay(50); // debounce
+      if (digitalRead(BUTTON_PIN) == LOW) {
+          sendButtonPressEvent();
+          while (digitalRead(BUTTON_PIN) == LOW) {
+              delay(10);
+          }
+      }
+  }
+  lastButtonState = currentButtonState;
+
+  // NFC scanning
   if (nfcFound) {
     uint8_t success;
-    uint8_t uid[] = { 0, 0, 0, 0, 0, 0, 0 };  // Buffer to store the returned UID
-    uint8_t uidLength;                        // Length of the UID (4 or 7 bytes)
+    uint8_t uid[] = { 0, 0, 0, 0, 0, 0, 0 };
+    uint8_t uidLength;
 
-    // Wait for card with a 100ms timeout (non-blocking)
     success = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength, 100);
-
     if (success) {
-      Serial.println("Card Entered!");
+      Serial.println("Cube Entered!");
       sendNfcEvent(EVENT_CUBE_ENTERED, uid, uidLength);
       
-      // Card is present. Poll it in a loop to detect when it leaves.
       int consecutiveFailures = 0;
       while (consecutiveFailures < 5) {
+        updateLeds();
         checkHeartbeats();
-        if (!isRegistered) {
-          break; // Lost Glove connection while card is present
+        if (!isRegistered) break;
+
+        // Monitor button even while cube is present
+        bool btnState = digitalRead(BUTTON_PIN);
+        if (btnState == LOW && lastButtonState == HIGH) {
+            delay(50);
+            if (digitalRead(BUTTON_PIN) == LOW) {
+                sendButtonPressEvent();
+                while (digitalRead(BUTTON_PIN) == LOW) delay(10);
+            }
         }
+        lastButtonState = btnState;
 
         delay(100);
-        
         uint8_t pollUid[7];
         uint8_t pollUidLength = 0;
         bool pollSuccess = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, pollUid, &pollUidLength, 100);
         
-        if (pollSuccess) {
-          consecutiveFailures = 0; // Reset counter on successful scan
-        } else {
-          consecutiveFailures++;   // Increment on failed scan
-        }
+        if (pollSuccess) consecutiveFailures = 0;
+        else consecutiveFailures++;
       }
       
       if (isRegistered) {
-        Serial.println("Card Left!");
+        Serial.println("Cube Left!");
         sendNfcEvent(EVENT_CUBE_LEFT, uid, uidLength);
       }
-    }
-  } else {
-    // SIMULATED MODE: Send simulated events every 10 seconds, checking heartbeats
-    uint8_t simulatedUid[] = { 0x04, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66 };
-    uint8_t uidLen = 7;
-    
-    Serial.println("[Simulated] Cube Entered!");
-    sendNfcEvent(EVENT_CUBE_ENTERED, simulatedUid, uidLen);
-    
-    unsigned long startWait = millis();
-    while (millis() - startWait < 5000 && isRegistered) {
-      checkHeartbeats();
-      delay(50);
-    }
-
-    if (isRegistered) {
-      Serial.println("[Simulated] Cube Left!");
-      sendNfcEvent(EVENT_CUBE_LEFT, simulatedUid, uidLen);
-    }
-
-    startWait = millis();
-    while (millis() - startWait < 5000 && isRegistered) {
-      checkHeartbeats();
-      delay(50);
     }
   }
 }
