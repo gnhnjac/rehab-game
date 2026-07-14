@@ -1,8 +1,8 @@
 // ignore_for_file: deprecated_member_use
 import 'package:flutter/material.dart';
 
-import '../main.dart' show DashboardScreen;
 import '../state/app_state_scope.dart';
+
 import '../widgets/patient_avatar.dart';
 import 'box_calibration_screen.dart';
 import 'fsr_calibration_screen.dart';
@@ -54,18 +54,9 @@ class PatientListScreen extends StatelessWidget {
               ),
             ],
           ),
-          IconButton(
-            icon: const Icon(Icons.sensors),
-            tooltip: 'Live Telemetry',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const DashboardScreen()),
-              );
-            },
-          ),
         ],
       ),
+
       body: Column(
         children: [
           Container(
@@ -147,18 +138,6 @@ class PatientListScreen extends StatelessWidget {
                     color: const Color(0xFF10B981),
                     onTap: () => Navigator.push(context,
                         MaterialPageRoute(builder: (_) => const BoxCalibrationScreen())),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _buildCalibrationCard(
-                    context: context,
-                    icon: Icons.sensors,
-                    title: 'Diagnostics',
-                    subtitle: 'Live Telemetry',
-                    color: Colors.cyan,
-                    onTap: () => Navigator.push(context,
-                        MaterialPageRoute(builder: (_) => const DashboardScreen())),
                   ),
                 ),
               ],
