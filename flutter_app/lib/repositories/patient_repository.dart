@@ -13,4 +13,6 @@ abstract class PatientRepository {
   Future<void> deletePatient(String id);
 
   Future<Patient> updatePrescription(String patientId, GamePrescription prescription);
+
+  Future<Patient> updateCalibration(String patientId, Map<String, dynamic> calibration);
 }

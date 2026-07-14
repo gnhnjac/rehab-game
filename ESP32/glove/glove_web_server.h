@@ -352,7 +352,21 @@ inline void handleGetRawSensors() {
         json += String(flexRaw[i]);
         if (i < NUM_FINGERS - 1) json += ",";
     }
-    json += "],\"forceRaw\":" + String(forceRaw) + "}";
+    json += "],\"forceRaw\":" + String(forceRaw);
+    
+    json += ",\"flexMin\":[";
+    for (int i = 0; i < NUM_FINGERS; i++) {
+        json += String(flexMin[i]);
+        if (i < NUM_FINGERS - 1) json += ",";
+    }
+    
+    json += "],\"flexMax\":[";
+    for (int i = 0; i < NUM_FINGERS; i++) {
+        json += String(flexMax[i]);
+        if (i < NUM_FINGERS - 1) json += ",";
+    }
+    json += "]}";
+
     
     server.send(200, "application/json", json);
 }

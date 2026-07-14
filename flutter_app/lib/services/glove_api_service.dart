@@ -34,7 +34,14 @@ class GloveApiService {
     final json = jsonDecode(response.body) as Map<String, dynamic>;
     final flexRaw = (json['flexRaw'] as List?)?.map((e) => (e as num).toInt()).toList() ?? [];
     final forceRaw = (json['forceRaw'] as num?)?.toInt() ?? 0;
-    return RawSensors(flexRaw: flexRaw, forceRaw: forceRaw);
+    final flexMin = (json['flexMin'] as List?)?.map((e) => (e as num).toInt()).toList() ?? [];
+    final flexMax = (json['flexMax'] as List?)?.map((e) => (e as num).toInt()).toList() ?? [];
+    return RawSensors(
+      flexRaw: flexRaw,
+      forceRaw: forceRaw,
+      flexMin: flexMin,
+      flexMax: flexMax,
+    );
   }
 
   /// POST /api/calibrate-sensor?sensorType=force&coefficients=r0,r1,r2,g0,g1,g2
@@ -138,7 +145,14 @@ class GloveApiService {
 class RawSensors {
   final List<int> flexRaw;
   final int forceRaw;
-  RawSensors({required this.flexRaw, required this.forceRaw});
+  final List<int> flexMin;
+  final List<int> flexMax;
+  RawSensors({
+    required this.flexRaw,
+    required this.forceRaw,
+    required this.flexMin,
+    required this.flexMax,
+  });
 }
 
 class CalibrationPoint {

@@ -6,6 +6,7 @@ import '../state/app_state_scope.dart';
 import '../widgets/patient_avatar.dart';
 import 'box_calibration_screen.dart';
 import 'cube_calibration_screen.dart';
+import 'flex_calibration_screen.dart';
 import 'fsr_calibration_screen.dart';
 import 'patient_detail_screen.dart';
 import 'patient_form_screen.dart';
@@ -116,42 +117,62 @@ class PatientListScreen extends StatelessWidget {
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
+            child: Column(
               children: [
-                Expanded(
-                  child: _buildCalibrationCard(
-                    context: context,
-                    icon: Icons.scale_rounded,
-                    title: 'Force Sensor',
-                    subtitle: 'Calibrate FSR',
-                    color: const Color(0xFF8B5CF6),
-                    onTap: () => Navigator.push(context,
-                        MaterialPageRoute(builder: (_) => const FsrCalibrationScreen())),
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildCalibrationCard(
+                        context: context,
+                        icon: Icons.scale_rounded,
+                        title: 'Force Sensor',
+                        subtitle: 'Calibrate FSR',
+                        color: const Color(0xFF8B5CF6),
+                        onTap: () => Navigator.push(context,
+                            MaterialPageRoute(builder: (_) => const FsrCalibrationScreen())),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _buildCalibrationCard(
+                        context: context,
+                        icon: Icons.back_hand_rounded,
+                        title: 'Flex Sensors',
+                        subtitle: 'Patient Range',
+                        color: const Color(0xFF3B82F6),
+                        onTap: () => Navigator.push(context,
+                            MaterialPageRoute(builder: (_) => const FlexCalibrationScreen())),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _buildCalibrationCard(
-                    context: context,
-                    icon: Icons.grid_view_rounded,
-                    title: 'Smart Boxes',
-                    subtitle: 'Flash LEDs',
-                    color: const Color(0xFF10B981),
-                    onTap: () => Navigator.push(context,
-                        MaterialPageRoute(builder: (_) => const BoxCalibrationScreen())),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _buildCalibrationCard(
-                    context: context,
-                    icon: Icons.nfc_rounded,
-                    title: 'RFID Cubes',
-                    subtitle: 'Register Tags',
-                    color: Colors.orangeAccent,
-                    onTap: () => Navigator.push(context,
-                        MaterialPageRoute(builder: (_) => const CubeCalibrationScreen())),
-                  ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _buildCalibrationCard(
+                        context: context,
+                        icon: Icons.grid_view_rounded,
+                        title: 'Smart Boxes',
+                        subtitle: 'Flash LEDs',
+                        color: const Color(0xFF10B981),
+                        onTap: () => Navigator.push(context,
+                            MaterialPageRoute(builder: (_) => const BoxCalibrationScreen())),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _buildCalibrationCard(
+                        context: context,
+                        icon: Icons.nfc_rounded,
+                        title: 'RFID Cubes',
+                        subtitle: 'Register Tags',
+                        color: Colors.orangeAccent,
+                        onTap: () => Navigator.push(context,
+                            MaterialPageRoute(builder: (_) => const CubeCalibrationScreen())),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),

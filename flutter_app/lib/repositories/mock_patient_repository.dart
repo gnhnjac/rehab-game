@@ -23,6 +23,7 @@ class MockPatientRepository implements PatientRepository {
       age: age,
       notes: notes,
       prescriptions: _defaultPrescriptions(),
+      calibration: _defaultCalibration(),
     );
   }
 
@@ -46,6 +47,16 @@ class MockPatientRepository implements PatientRepository {
     };
   }
 
+  Map<String, dynamic> _defaultCalibration() {
+    return {
+      'flex_min': [0, 0, 0, 0, 0],
+      'flex_max': [4095, 4095, 4095, 4095, 4095],
+      'fsr_coef_a': 0.0,
+      'fsr_coef_b': 0.0,
+      'fsr_coef_c': 0.0,
+    };
+  }
+
   @override
   Future<List<Patient>> getAllPatients() async {
     return _patients.values.toList(growable: false);
@@ -65,6 +76,7 @@ class MockPatientRepository implements PatientRepository {
       age: age,
       notes: notes,
       prescriptions: _defaultPrescriptions(),
+      calibration: _defaultCalibration(),
     );
     _patients[id] = patient;
     return patient;
@@ -93,6 +105,17 @@ class MockPatientRepository implements PatientRepository {
     final updatedPrescriptions = Map<GameType, GamePrescription>.from(patient.prescriptions);
     updatedPrescriptions[prescription.type] = prescription;
     final updatedPatient = patient.copyWith(prescriptions: updatedPrescriptions);
+    _patients[patientId] = updatedPatient;
+    return updatedPatient;
+  }
+
+  @override
+  Future<Patient> updateCalibration(String patientId, Map<String, dynamic> calibration) async {
+    final patient = _patients[patientId];
+    if (patient == null) {
+      throw ArgumentError('No patient with id $patientId');
+    }
+    final updatedPatient = patient.copyWith(calibration: calibration);
     _patients[patientId] = updatedPatient;
     return updatedPatient;
   }

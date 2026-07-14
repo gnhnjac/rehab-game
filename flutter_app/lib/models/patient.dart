@@ -6,6 +6,7 @@ class Patient {
   final int? age;
   final String? notes;
   final Map<GameType, GamePrescription> prescriptions;
+  final Map<String, dynamic> calibration;
 
   const Patient({
     required this.id,
@@ -13,6 +14,7 @@ class Patient {
     this.age,
     this.notes,
     required this.prescriptions,
+    required this.calibration,
   });
 
   Patient copyWith({
@@ -20,6 +22,7 @@ class Patient {
     int? age,
     String? notes,
     Map<GameType, GamePrescription>? prescriptions,
+    Map<String, dynamic>? calibration,
   }) {
     return Patient(
       id: id,
@@ -27,6 +30,7 @@ class Patient {
       age: age ?? this.age,
       notes: notes ?? this.notes,
       prescriptions: prescriptions ?? this.prescriptions,
+      calibration: calibration ?? this.calibration,
     );
   }
 }
