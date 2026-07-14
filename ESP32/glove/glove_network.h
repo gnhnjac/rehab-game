@@ -1,16 +1,14 @@
-#ifndef GLOVE_FIREBASE_H
-#define GLOVE_FIREBASE_H
+#ifndef GLOVE_NETWORK_H
+#define GLOVE_NETWORK_H
 
 #include <WiFi.h>
-#include <HTTPClient.h>
-#include <WiFiClientSecure.h>
 #include <time.h>
 #include "glove_secrets.h"
 
 // Track time sync state
 extern bool ntpInitialized;
 
-// Queue structure to defer REST operations out of the ESP-NOW callback context
+// Queue structure to defer NFC event processing out of the ESP-NOW callback context
 struct BoxActionEvent {
     String cubeId;
     uint32_t timestamp;
@@ -100,35 +98,7 @@ inline uint32_t getEpochTime() {
     return (uint32_t)now;
 }
 
-// Diagnostic helper to print network status, DNS resolution, and heap on HTTP failure
-inline void printFirebaseErrorDiagnostics(int responseCode) {
-    Serial.printf("[Firebase] HTTP Fail Code: %d (%s)\n", 
-        responseCode, HTTPClient::errorToString(responseCode).c_str());
-
-    String host = "firestore.googleapis.com";
-    IPAddress resolvedIP;
-    if (WiFi.hostByName(host.c_str(), resolvedIP)) {
-        Serial.printf("[Firebase] Diagnostics: DNS lookup OK (%s -> %s)\n", 
-            host.c_str(), resolvedIP.toString().c_str());
-    } else {
-        Serial.printf("[Firebase] Diagnostics: DNS lookup FAILED for %s\n", host.c_str());
-    }
-
-    Serial.printf("[Firebase] Diagnostics: Free Heap = %d bytes\n", ESP.getFreeHeap());
-    Serial.printf("[Firebase] Diagnostics: Wi-Fi Status = %d (3 = Connected)\n", WiFi.status());
-}
-
-
-inline void uploadLiveTelemetry(bool calibrated, int* flexRaw, int* flexPercent, int forceRaw, int forcePercent) {
-    // RTDB Live Telemetry streaming is disabled to prioritize local HTTP server speed.
-}
-
-inline void uploadBoxAction(const String& cubeId, uint32_t timestamp, bool isPlaced, int boxIndex) {
-    // RTDB Box Action uploads are disabled. NFC actions are logged and synced directly to Cloud Firestore.
-}
-
 // Delegated to glove_sync.h
 void saveSessionResultLocally(int gameType, int successes, int failures, unsigned long avgRespTimeMs, float avgForceOrRom);
 
-#endif // GLOVE_FIREBASE_H
-
+#endif // GLOVE_NETWORK_H

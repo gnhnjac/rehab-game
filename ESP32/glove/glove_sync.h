@@ -6,7 +6,7 @@
 #include <SPIFFS.h>
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
-#include "glove_firebase.h"
+#include "glove_network.h"
 #include "glove_secrets.h"
 
 // Convert epoch time to RFC 3339 string (e.g., 2026-07-14T14:02:00Z)

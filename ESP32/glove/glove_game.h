@@ -104,7 +104,7 @@ void sendSuccessFlashToBoxes();
 void sendFailureBlinkToBoxes();
 void sendIdentifyToBox(const uint8_t *mac);
 
-// Offline result buffer (defined in glove.ino/glove_firebase.h)
+// Offline result buffer (defined in glove.ino/glove_network.h)
 void saveSessionResultLocally(int gameType, int successes, int failures, unsigned long avgRespTimeMs, float avgForceOrRom);
 
 // Helper: Convert color string to RGB

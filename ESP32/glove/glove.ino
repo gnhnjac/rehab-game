@@ -9,7 +9,7 @@ bool hapticEnabled = false;
 #include "glove_haptic.h"
 #include "glove_sensors.h"
 #include "glove_audio.h"
-#include "glove_firebase.h"
+#include "glove_network.h"
 #include "glove_sync.h"
 #include "glove_game.h"
 #include "glove_espnow.h"
@@ -64,11 +64,8 @@ const unsigned long printInterval = 500; // Print sensor states every 500ms
 unsigned long lastSampleTime = 0;
 const unsigned long sampleInterval = 20; // Sample sensors at 50Hz (every 20ms)
 
-// Background upload task pinned to Core 0 (handling all Wi-Fi / HTTPS uploads)
-void telemetryUploadTask(void* parameter) {
-    unsigned long lastUploadTime = 0;
-    const unsigned long uploadInterval = 500; // Upload telemetry to Firebase every 500ms
-    
+// Background network task pinned to Core 0 (handling local HTTP server and offline sync)
+void networkTask(void* parameter) {
     for (;;) {
         // Sleep for a short duration to yield CPU to other Core 0 system tasks (like Wi-Fi stack)
         vTaskDelay(pdMS_TO_TICKS(20));
@@ -76,38 +73,21 @@ void telemetryUploadTask(void* parameter) {
         // Handle local HTTP / captive portal requests
         handleNetworkRequests();
         
-        // 1. Process any deferred Firebase BoxAction uploads from the ESP-NOW queue
+        // Process any deferred NFC events from the ESP-NOW queue
         BoxActionEvent pendingEvent;
         if (popEvent(pendingEvent)) {
-            uploadBoxAction(pendingEvent.cubeId, pendingEvent.timestamp, pendingEvent.isPlaced, pendingEvent.boxIndex);
+            // Events are now processed locally by the game engine
+            Serial.printf("[Event] Box %d cube %s %s\n", 
+                pendingEvent.boxIndex, pendingEvent.cubeId.c_str(),
+                pendingEvent.isPlaced ? "placed" : "removed");
         }
 
-        // 2. Run sync bridge to upload any buffered offline logs
+        // Run sync bridge to upload any buffered offline logs
         static unsigned long lastSyncTime = 0;
         if (millis() - lastSyncTime >= 5000) { // Check sync queue every 5 seconds
             lastSyncTime = millis();
             syncBufferedLogs();
         }
-
-        // 3. Periodically upload live telemetry (Disabled to prevent blocking local HTTP requests)
-        /*
-        if (millis() - lastUploadTime >= uploadInterval) {
-            lastUploadTime = millis();
-            
-            SensorTelemetryData localData;
-            // Safely fetch a local copy of the shared telemetry data
-            if (xSemaphoreTake(telemetryMutex, portMAX_DELAY) == pdTRUE) {
-                localData = sharedTelemetry;
-                xSemaphoreGive(telemetryMutex);
-            }
-            
-            if (localData.calibrated) {
-                uploadLiveTelemetry(true, localData.flexRaw, localData.flexPercent, localData.forceRaw, localData.forcePercent);
-            } else {
-                uploadLiveTelemetry(false, nullptr, nullptr, 0, 0);
-            }
-        }
-        */
     }
 }
 
@@ -149,11 +129,11 @@ void setup() {
     // Create a mutex to protect shared telemetry data across cores
     telemetryMutex = xSemaphoreCreateMutex();
 
-    // Spawn the background uploading task on Core 0
+    // Spawn the background network task on Core 0
     xTaskCreatePinnedToCore(
-        telemetryUploadTask,     // Task function
-        "TelemetryUploadTask",   // Task name
-        8192,                    // Stack size (8KB is plenty for WiFiClientSecure/HTTPS)
+        networkTask,             // Task function
+        "NetworkTask",           // Task name
+        8192,                    // Stack size
         NULL,                    // Parameter passed to task
         1,                       // Task priority
         NULL,                    // Task handle
