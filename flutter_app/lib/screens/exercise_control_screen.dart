@@ -108,7 +108,6 @@ class _ExerciseControlScreenState extends State<ExerciseControlScreen> {
       if (!mounted) return;
       setState(() {
         _sessionStarted = true;
-        _gameRunning = true;
       });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
