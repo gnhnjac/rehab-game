@@ -128,19 +128,39 @@ class _FsrCalibrationScreenState extends State<FsrCalibrationScreen> {
         'fo_max': _capturedMax!,
       };
 
+      debugPrint("Saving FSR Calibration: ID=${activePatient.id}, Min=$_capturedMin, Max=$_capturedMax");
       await repo.updateCalibration(activePatient.id, calData);
       
-      // Sync local app state instantly and push new calibration to the Glove
+      // Sync local app state instantly
       appState.updatePatientCalibrationLocally(activePatient.id, calData);
-      await appState.setActivePatient(activePatient.id);
+      
+      // 2. Sync new calibration to the Glove (non-blocking if offline)
+      bool gloveSyncSuccess = true;
+      String? gloveError;
+      try {
+        await appState.setActivePatient(activePatient.id);
+      } catch (e) {
+        gloveSyncSuccess = false;
+        gloveError = e.toString();
+      }
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Force calibration saved successfully for ${activePatient.name}!'),
-          backgroundColor: _accent,
-        ),
-      );
+      if (gloveSyncSuccess) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Force calibration saved successfully to Firestore & Glove for ${activePatient.name} (ID: ${activePatient.id})!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Saved to database for ${activePatient.name} (ID: ${activePatient.id}), but Glove sync failed: $gloveError. It will sync when starting game.'),
+            backgroundColor: Colors.orangeAccent,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
       Navigator.pop(context);
     } catch (e) {
       if (!mounted) return;
