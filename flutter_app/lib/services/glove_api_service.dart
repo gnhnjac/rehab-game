@@ -96,10 +96,11 @@ class GloveApiService {
     List<GloveCube> cubes = const [],
   }) async {
     final query = <String, String>{
-      'gameType': '${prescription.type.index}',
+      'gameType': '${prescription.type.index + 1}',
       'cycles': '${prescription.cycles}',
       'difficulty': '2',
     };
+
 
     switch (prescription) {
       case CubesBoxesPrescription p:

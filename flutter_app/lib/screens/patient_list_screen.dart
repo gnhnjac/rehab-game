@@ -122,8 +122,51 @@ class PatientListScreen extends StatelessWidget {
               ],
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _buildCalibrationCard(
+                    context: context,
+                    icon: Icons.scale_rounded,
+                    title: 'Force Sensor',
+                    subtitle: 'Calibrate FSR',
+                    color: const Color(0xFF8B5CF6),
+                    onTap: () => Navigator.push(context,
+                        MaterialPageRoute(builder: (_) => const FsrCalibrationScreen())),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _buildCalibrationCard(
+                    context: context,
+                    icon: Icons.grid_view_rounded,
+                    title: 'Smart Boxes',
+                    subtitle: 'Flash LEDs',
+                    color: const Color(0xFF10B981),
+                    onTap: () => Navigator.push(context,
+                        MaterialPageRoute(builder: (_) => const BoxCalibrationScreen())),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _buildCalibrationCard(
+                    context: context,
+                    icon: Icons.sensors,
+                    title: 'Diagnostics',
+                    subtitle: 'Live Telemetry',
+                    color: Colors.cyan,
+                    onTap: () => Navigator.push(context,
+                        MaterialPageRoute(builder: (_) => const DashboardScreen())),
+                  ),
+                ),
+              ],
+            ),
+          ),
           Expanded(
             child: patients.isEmpty
+
                 ? const Center(
                     child: Text('No patients yet — tap + to add one.'),
                   )
@@ -210,4 +253,58 @@ class PatientListScreen extends StatelessWidget {
       ),
     );
   }
+
+  Widget _buildCalibrationCard({
+    required BuildContext context,
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF141722),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFF232A3D)),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(icon, color: color, size: 22),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  title,
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: const TextStyle(color: Colors.grey, fontSize: 10),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
+
