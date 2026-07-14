@@ -180,7 +180,7 @@ void setupAudio() {
     }
     selectSdCard();
     delay(1200);
-    setVolume(15);
+    setVolume(30);
 }
 
 void playAudioTrack(uint8_t cmd, uint8_t high_arg, uint8_t low_arg) {

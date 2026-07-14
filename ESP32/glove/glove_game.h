@@ -301,14 +301,7 @@ inline void startNewGameSession() {
 
     // Check if buffer is full (50 sessions) and offline (WiFi not connected)
     if (getBufferedLogCount() >= 50 && WiFi.status() != WL_CONNECTED) {
-        Serial.println("[Game] Warning: Local log buffer is FULL (50 sessions) and offline. Cannot start session!");
-        playFailureSound(); // Audio warning
-        
-        // Visual warning: Flash red on all boxes
-        uint8_t broadcastMac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-        sendLedColorToBox(broadcastMac, 255, 0, 0); // Solid red
-        sendFailureBlinkToBoxes();
-        return; // Block starting a new session
+        Serial.println("[Game] Warning: Local log buffer is FULL (50 sessions) and offline. Circular buffer will overwrite oldest logs.");
     }
     
     Serial.printf("[Game] Starting Game Session. Type: %d, Timer: %ds, Cycles: %d\n", 
@@ -589,8 +582,8 @@ inline void updateGame() {
         return;
     }
     
-    // 2. Play countdown beep every 5 seconds
-    if (now - sessionState.lastCountdownTime >= 5000) {
+    // 2. Play countdown beep every 5 seconds (only if there is an active timer)
+    if (currentPrescription.timerSeconds > 0 && now - sessionState.lastCountdownTime >= 5000) {
         sessionState.lastCountdownTime = now;
         playCountdownBeep();
         
