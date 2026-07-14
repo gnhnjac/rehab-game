@@ -99,7 +99,12 @@ class _FlexCalibrationScreenState extends State<FlexCalibrationScreen> {
   }
 
   Future<void> _saveCalibration() async {
-    if (_capturedMin == null || _capturedMax == null) return;
+    if (_capturedMin == null || _capturedMax == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Error: Please capture both Open and Closed hand baselines before saving.')),
+      );
+      return;
+    }
     
     final appState = AppStateScope.of(context);
     final activePatient = appState.activePatient;
@@ -113,13 +118,17 @@ class _FlexCalibrationScreenState extends State<FlexCalibrationScreen> {
     setState(() => _saving = true);
 
     try {
-      // 1. Upload to the physical Glove
-      for (int i = 0; i < 5; i++) {
-        await _api.calibrateFlex(
-          fingerIndex: i,
-          flexMin: _capturedMin![i],
-          flexMax: _capturedMax![i],
-        );
+      // 1. Upload to the physical Glove (non-blocking if Glove is offline)
+      try {
+        for (int i = 0; i < 5; i++) {
+          await _api.calibrateFlex(
+            fingerIndex: i,
+            flexMin: _capturedMin![i],
+            flexMax: _capturedMax![i],
+          );
+        }
+      } catch (e) {
+        debugPrint("Note: Could not upload calibration to Glove directly (Glove offline): $e");
       }
 
       // 2. Save to Firestore via PatientRepository
@@ -136,8 +145,9 @@ class _FlexCalibrationScreenState extends State<FlexCalibrationScreen> {
 
       await repo.updateCalibration(activePatient.id, calData);
       
-      // Update local app state patient data
+      // Update local app state patient data and push new calibration to the Glove
       await appState.loadPatients();
+      await appState.setActivePatient(activePatient.id);
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

@@ -91,7 +91,12 @@ class _FsrCalibrationScreenState extends State<FsrCalibrationScreen> {
 
 
   Future<void> _saveCalibration() async {
-    if (_capturedMin == null || _capturedMax == null) return;
+    if (_capturedMin == null || _capturedMax == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Error: Please capture both Rest and Squeeze baselines before saving.')),
+      );
+      return;
+    }
     if (_capturedMax! >= _capturedMin!) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Error: Maximum squeeze raw value must be lower than the rest value (FSR raw values decrease under pressure).')),
@@ -111,11 +116,15 @@ class _FsrCalibrationScreenState extends State<FsrCalibrationScreen> {
     setState(() => _saving = true);
 
     try {
-      // 1. Upload to Glove hardware
-      await _api.calibrateForce(
-        forceMin: _capturedMin!,
-        forceMax: _capturedMax!,
-      );
+      // 1. Upload to Glove hardware (non-blocking if Glove is offline)
+      try {
+        await _api.calibrateForce(
+          forceMin: _capturedMin!,
+          forceMax: _capturedMax!,
+        );
+      } catch (e) {
+        debugPrint("Note: Could not upload force calibration to Glove directly: $e");
+      }
 
       // 2. Save to Firestore via PatientRepository
       final repo = PatientRepositoryProvider.getRepository();
@@ -131,8 +140,9 @@ class _FsrCalibrationScreenState extends State<FsrCalibrationScreen> {
 
       await repo.updateCalibration(activePatient.id, calData);
       
-      // Sync local app state
+      // Sync local app state and push new calibration to the Glove
       await appState.loadPatients();
+      await appState.setActivePatient(activePatient.id);
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
