@@ -401,7 +401,7 @@ inline void handleCalibrateSensor() {
         int fMin = server.arg("forceMin").toInt();
         int fMax = server.arg("forceMax").toInt();
         
-        if (fMin > 0 && fMax > 0) {
+        if (fMin >= 0 && fMax >= 0) {
             forceMin = fMin;
             forceMax = fMax;
             isCalibrated = true;
