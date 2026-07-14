@@ -325,16 +325,38 @@ void sendNfcEvent(CubeEventType event, uint8_t *uid, uint8_t uidLen) {
     esp_now_send(gloveMac, (uint8_t *)&msg, sizeof(msg));
 }
 
-void sendButtonPressEvent() {
+void sendButtonPressEvent(bool isLongPress) {
     if (!isRegistered) return;
     AppMessage msg;
     msg.type = MSG_TYPE_EVENT;
     memcpy(msg.box_mac, myMac, 6);
     msg.event = EVENT_BUTTON_PRESSED;
-    msg.uid_len = 0;
-    memset(msg.uid, 0, MAX_CUBE_UID_LEN);
+    msg.uid_len = 1;
+    msg.uid[0] = isLongPress ? 1 : 0; // 1 = long press, 0 = short press
+    memset(msg.uid + 1, 0, MAX_CUBE_UID_LEN - 1);
     esp_now_send(gloveMac, (uint8_t *)&msg, sizeof(msg));
-    Serial.println("[Button] Transmitted button press event to Glove.");
+    Serial.printf("[Button] Transmitted button press event (Long=%d) to Glove.\n", isLongPress);
+}
+
+void checkButton() {
+    static bool lastButtonState = HIGH;
+    bool currentButtonState = digitalRead(BUTTON_PIN);
+    if (currentButtonState == LOW && lastButtonState == HIGH) {
+        delay(50); // debounce
+        if (digitalRead(BUTTON_PIN) == LOW) {
+            unsigned long pressStart = millis();
+            while (digitalRead(BUTTON_PIN) == LOW) {
+                delay(10);
+            }
+            unsigned long duration = millis() - pressStart;
+            if (duration > 1500) {
+                sendButtonPressEvent(true); // Long press -> Calibrate
+            } else {
+                sendButtonPressEvent(false); // Short press -> Start/Stop
+            }
+        }
+    }
+    lastButtonState = currentButtonState;
 }
 
 void setup(void) {
@@ -398,18 +420,7 @@ void loop(void) {
   checkHeartbeats();
 
   // Monitor physical button press
-  static bool lastButtonState = HIGH;
-  bool currentButtonState = digitalRead(BUTTON_PIN);
-  if (currentButtonState == LOW && lastButtonState == HIGH) {
-      delay(50); // debounce
-      if (digitalRead(BUTTON_PIN) == LOW) {
-          sendButtonPressEvent();
-          while (digitalRead(BUTTON_PIN) == LOW) {
-              delay(10);
-          }
-      }
-  }
-  lastButtonState = currentButtonState;
+  checkButton();
 
   // NFC scanning
   if (nfcFound) {
@@ -429,15 +440,7 @@ void loop(void) {
         if (!isRegistered) break;
 
         // Monitor button even while cube is present
-        bool btnState = digitalRead(BUTTON_PIN);
-        if (btnState == LOW && lastButtonState == HIGH) {
-            delay(50);
-            if (digitalRead(BUTTON_PIN) == LOW) {
-                sendButtonPressEvent();
-                while (digitalRead(BUTTON_PIN) == LOW) delay(10);
-            }
-        }
-        lastButtonState = btnState;
+        checkButton();
 
         delay(100);
         uint8_t pollUid[7];

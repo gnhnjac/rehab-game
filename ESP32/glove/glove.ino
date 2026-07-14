@@ -56,6 +56,7 @@ int fsrCalGrams[3] = {0, 100, 500};
 uint8_t mainBoxMac[6] = {0};
 bool mainBoxRegistered = false;
 volatile bool pendingButtonPress = false;
+volatile bool buttonPressIsLong = false;
 
 
 // Time tracking
@@ -171,28 +172,40 @@ void loop() {
     // Periodically clean up timed-out boxes
     checkBoxTimeouts();
 
-    // Check calibration / start button (now triggered wirelessly via ESP-NOW from Main Box)
+    // Check calibration / start button (triggered wirelessly via ESP-NOW from Main Box)
     if (pendingButtonPress) {
         pendingButtonPress = false;
         
-        if (sessionState.active) {
-            // If game session is running, button stops it
-            Serial.println("[Button] Game session aborted by wireless button press.");
-            stopGameSession(false);
-        } 
-        else if (currentPrescription.gameType != GAME_NONE) {
-            // If prescription is loaded but game is not active, button starts it
-            Serial.println("[Button] Starting game session by wireless button press.");
-            startNewGameSession();
-        } 
-        else {
-            // Default calibration mode
+        if (buttonPressIsLong) {
+            // Long press: start calibration at any time
+            Serial.println("[Button] Long press detected! Starting sensor calibration...");
             isCalibrated = false;
             if (xSemaphoreTake(telemetryMutex, portMAX_DELAY) == pdTRUE) {
                 sharedTelemetry.calibrated = false;
                 xSemaphoreGive(telemetryMutex);
             }
-            runSensorCalibration(5); // Default 5 seconds
+            runSensorCalibration(5); // 5-second calibration
+        } 
+        else {
+            // Short press: handle game start/stop
+            if (sessionState.active) {
+                Serial.println("[Button] Short press: aborting game session.");
+                stopGameSession(false);
+            } 
+            else if (currentPrescription.gameType != GAME_NONE) {
+                Serial.println("[Button] Short press: starting game session.");
+                startNewGameSession();
+            } 
+            else {
+                // If no prescription loaded, short press falls back to calibration
+                Serial.println("[Button] Short press: no prescription loaded, starting calibration...");
+                isCalibrated = false;
+                if (xSemaphoreTake(telemetryMutex, portMAX_DELAY) == pdTRUE) {
+                    sharedTelemetry.calibrated = false;
+                    xSemaphoreGive(telemetryMutex);
+                }
+                runSensorCalibration(5);
+            }
         }
     }
 

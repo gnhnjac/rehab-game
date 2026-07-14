@@ -11,6 +11,7 @@ extern bool isAPMode;
 extern uint8_t mainBoxMac[6];
 extern bool mainBoxRegistered;
 extern volatile bool pendingButtonPress;
+extern volatile bool buttonPressIsLong;
 
 // Forward declaration of local game event handler
 void handleLocalNfcEvent(String cubeId, int boxIndex, bool isPlaced, const uint8_t *boxMac);
@@ -171,6 +172,7 @@ inline void OnDataRecv(const uint8_t * incoming_mac, const uint8_t *incomingData
         if (msg.event == EVENT_BUTTON_PRESSED) {
             Serial.println("[ESP-NOW] Physical button event from Main Box received.");
             pendingButtonPress = true;
+            buttonPressIsLong = (msg.uid_len > 0 && msg.uid[0] == 1);
             return;
         }
 
