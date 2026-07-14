@@ -60,7 +60,7 @@ class AppState extends ChangeNotifier {
     
     // Quick check to see if Glove is reachable before executing sequential calibration requests
     try {
-      await api.fetchRawSensors().timeout(const Duration(milliseconds: 400));
+      await api.fetchRawSensors().timeout(const Duration(milliseconds: 1200));
     } catch (e) {
       if (kDebugMode) {
         print("Glove is offline, skipped active patient calibration sync: $e");

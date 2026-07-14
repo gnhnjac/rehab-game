@@ -116,17 +116,7 @@ class _FsrCalibrationScreenState extends State<FsrCalibrationScreen> {
     setState(() => _saving = true);
 
     try {
-      // 1. Upload to Glove hardware (non-blocking if Glove is offline)
-      try {
-        await _api.calibrateForce(
-          forceMin: _capturedMin!,
-          forceMax: _capturedMax!,
-        );
-      } catch (e) {
-        debugPrint("Note: Could not upload force calibration to Glove directly: $e");
-      }
-
-      // 2. Save to Firestore via PatientRepository
+      // 1. Save to Firestore via PatientRepository
       final repo = PatientRepositoryProvider.getRepository();
       final Map<String, dynamic> calData = {
         'flex_min': activePatient.calibration['flex_min'] ?? [0, 0, 0, 0, 0],
