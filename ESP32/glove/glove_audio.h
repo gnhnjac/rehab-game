@@ -51,6 +51,24 @@ inline void setVolume(uint8_t vol) {
 // Play track F_xx.mp3 in folder F (1-99)
 inline void playTrack(uint8_t folder, uint8_t track) {
     sendDfPlayerCmd(0x0F, folder, track);
+    
+    // Automatically set jingle resume timer if we play any voice prompt or chime,
+    // unless it's the jingle itself (04/011.mp3) or the end-of-game sounds
+    if (sessionState.active) {
+        if (folder == 4 && track == 11) {
+            // This is the jingle playing, do not set resume timer
+        } else if (folder == 4 && (track == 4 || track == 5)) {
+            // These are end-of-game sounds (completion / timeout), do not set resume timer
+        } else {
+            // This is an interruptive voice prompt or success/failure chime.
+            // Set jingle resume time. Start prompts (folder 1, 2, 3) are longer.
+            if (folder != 4) {
+                sessionState.jingleResumeTime = millis() + 5500; // 5.5 seconds for instructions
+            } else {
+                sessionState.jingleResumeTime = millis() + 1800; // 1.8 seconds for short prompts
+            }
+        }
+    }
 }
 
 // Feedback and countdown sound wrappers

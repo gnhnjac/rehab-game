@@ -109,4 +109,75 @@ typedef struct {
     int forcePercent;
 } SensorTelemetryData;
 
+// --- GAME PRESCRIPTION & STATE STRUCTURES ---
+enum GameType {
+    GAME_NONE = 0,
+    GAME_CUBES_BOXES = 1,
+    GAME_PINCH = 2,
+    GAME_BEND = 3
+};
+
+struct RxCube {
+    uint8_t uid[MAX_CUBE_UID_LEN];
+    uint8_t uid_len = 0;
+    char color[16] = "";
+    char shape[16] = "";
+    int weightGrams = 0;
+};
+
+struct GamePrescription {
+    GameType gameType = GAME_NONE;
+    int timerSeconds = 60;
+    int totalCycles = 3;
+    int difficulty = 1;
+    RxCube cubes[8];
+    int cubesCount = 0;
+    int targetWeightGrams = 100;
+    int requiredHoldTimeSeconds = 5;
+    int activeFingers[NUM_FINGERS] = {0}; // 1 = active, 0 = inactive
+    int requiredRom[NUM_FINGERS] = {0}; // target percentages
+    int sequence[NUM_FINGERS] = {0}; // sequence of finger indexes (1-indexed, e.g. 1=thumb, 2=index)
+    int sequenceCount = 0;
+};
+
+struct GameSessionState {
+    bool active = false;
+    unsigned long startTime = 0;
+    unsigned long timerEndMillis = 0;
+    unsigned long lastCountdownTime = 0;
+    int currentCycle = 0;
+    int successCount = 0;
+    int failureCount = 0;
+    unsigned long totalResponseTimeMs = 0;
+    unsigned long lastActionTime = 0;
+    
+    // Pinch / Bend specific variables
+    bool isHolding = false;
+    unsigned long holdStartTime = 0;
+    unsigned long lastWarningTime = 0;
+    int currentStepInSequence = 0; // For Bend sequence
+    
+    // Target indicators (CubesBoxes)
+    int targetBoxIndex = -1;
+    uint8_t targetBoxMac[6] = {0};
+    RxCube targetCube;
+
+    // Accumulators for metrics
+    float sumSteadyForce = 0;
+    int countSteadyForce = 0;
+    float maxBendRom = 0;
+    float sumHoldRom = 0;
+    int countHoldRom = 0;
+    
+    // Countdown tracking flags
+    bool played10sPrompt = false;
+    bool played5sPrompt = false;
+
+    // Jingle resume tracking
+    unsigned long jingleResumeTime = 0;
+};
+
+extern GameSessionState sessionState;
+extern GamePrescription currentPrescription;
+
 
