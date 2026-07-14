@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../services/glove_api_service.dart';
+import '../services/telemetry_provider.dart';
 import '../state/app_state_scope.dart';
 import '../repositories/patient_repository_provider.dart';
 
@@ -17,7 +18,7 @@ class _FsrCalibrationScreenState extends State<FsrCalibrationScreen> {
   static const Color _accent = Color(0xFF8B5CF6); // Purple
 
   final GloveApiService _api = GloveApiService();
-  Timer? _pollTimer;
+  StreamSubscription? _telemetrySub;
   int _liveRaw = 4095;
   bool _online = false;
   bool _saving = false;
@@ -33,23 +34,22 @@ class _FsrCalibrationScreenState extends State<FsrCalibrationScreen> {
 
   @override
   void dispose() {
-    _pollTimer?.cancel();
+    _telemetrySub?.cancel();
     super.dispose();
   }
 
   void _startPolling() {
-    _pollTimer = Timer.periodic(const Duration(milliseconds: 250), (_) async {
-      try {
-        final raw = await _api.fetchRawSensors();
-        if (!mounted) return;
-        setState(() {
-          _liveRaw = raw.forceRaw;
-          _online = true;
-        });
-      } catch (_) {
-        if (!mounted) return;
-        setState(() => _online = false);
-      }
+    final telemetryService = TelemetryProvider.getService();
+    _online = telemetryService.isConnected;
+    
+    _telemetrySub = telemetryService.telemetryStream.listen((telemetry) {
+      if (!mounted) return;
+      setState(() {
+        if (telemetry.force.raw.isNotEmpty) {
+          _liveRaw = telemetry.force.raw.first;
+        }
+        _online = telemetryService.isConnected;
+      });
     });
   }
 
