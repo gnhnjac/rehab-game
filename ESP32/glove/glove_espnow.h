@@ -286,7 +286,7 @@ inline void checkBoxTimeouts() {
     RegistryLock lock;
     unsigned long now = millis();
     for (auto it = boxRegistry.begin(); it != boxRegistry.end(); ) {
-        if (now - it->second.last_seen > 5000) {
+        if (now - it->second.last_seen > 15000) {
             Serial.print("[Glove] Heartbeat timeout. Unregistering Box [");
             printMac(it->second.mac);
             Serial.println("]");

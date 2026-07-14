@@ -184,8 +184,8 @@ void checkHeartbeats() {
 
   unsigned long now = millis();
 
-  // 1. Send heartbeat every 1 second
-  if (now - last_heartbeat_sent >= 1000) {
+  // 1. Send heartbeat every 5 seconds
+  if (now - last_heartbeat_sent >= 5000) {
     last_heartbeat_sent = now;
     AppMessage heartbeatMsg;
     heartbeatMsg.type = MSG_TYPE_HEARTBEAT;
@@ -197,8 +197,8 @@ void checkHeartbeats() {
     esp_now_send(gloveMac, (uint8_t *)&heartbeatMsg, sizeof(heartbeatMsg));
   }
 
-  // 2. Check for Glove timeout (5 seconds)
-  if (now - last_received_from_glove > 5000) {
+  // 2. Check for Glove timeout (15 seconds)
+  if (now - last_received_from_glove > 15000) {
     Serial.println("[Smart Box] Lost connection to Glove (heartbeat timeout). Unregistering...");
     isRegistered = false;
     

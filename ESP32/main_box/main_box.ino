@@ -12,6 +12,9 @@
 // PN532 NFC reader
 Adafruit_PN532 nfc(SDA_PIN, SCL_PIN);
 
+// Explicitly instantiate HardwareSerial 2 for the MP3 module
+HardwareSerial MP3(2);
+
 // --- NEOPIXEL STRIP CONFIGURATION ---
 #define NEOPIXEL_PIN 13 // Change to your physical NeoPixel data GPIO pin
 #define NUM_PIXELS 8    // Change to the number of LEDs in your strip
@@ -133,45 +136,45 @@ static const uint8_t reset_CMD[] = { 0x7E, 0x03, 0x35, 0x05, 0xEF };
 
 bool resetMp3() {
     Serial.println("[Audio] MP3 RESET");
-    Serial2.flush();
+    MP3.flush();
     for (int i = 0; i < 5; i++) {
-        Serial2.write(reset_CMD[i]);
+        MP3.write(reset_CMD[i]);
     }
     delay(50);
-    return Serial2.available() > 0;
+    return MP3.available() > 0;
 }
 
 void selectSdCard() {
     Serial.println("[Audio] MP3 Select SD Card");
     for (int i = 0; i < 5; i++) {
-        Serial2.write(select_SD_CMD[i]);
+        MP3.write(select_SD_CMD[i]);
     }
 }
 
 void setVolume(byte volume) {
     delay(20);
     Serial.printf("[Audio] Set volume = %d of 30\n", volume);
-    Serial2.write(start_byte);
-    Serial2.write(0x03); // Length
-    Serial2.write(set_volume_CMD);
-    Serial2.write(volume);
-    Serial2.write(end_byte);
+    MP3.write(start_byte);
+    MP3.write(0x03); // Length
+    MP3.write(set_volume_CMD);
+    MP3.write(volume);
+    MP3.write(end_byte);
     delay(20);
 }
 
 void playFilename(int8_t directory, int8_t file) {
     Serial.printf("[Audio] Playing directory %d, file %d\n", directory, file);
-    Serial2.write(start_byte);
-    Serial2.write(0x04); // Length
-    Serial2.write(play_filename_CMD);
-    Serial2.write((byte)directory);
-    Serial2.write((byte)file);
-    Serial2.write(end_byte);
+    MP3.write(start_byte);
+    MP3.write(0x04); // Length
+    MP3.write(play_filename_CMD);
+    MP3.write((byte)directory);
+    MP3.write((byte)file);
+    MP3.write(end_byte);
     delay(20);
 }
 
 void setupAudio() {
-    Serial2.begin(9600, SERIAL_8N1, DFPLAYER_RX_PIN, DFPLAYER_TX_PIN);
+    MP3.begin(9600, SERIAL_8N1, DFPLAYER_RX_PIN, DFPLAYER_TX_PIN);
     delay(100);
     if (resetMp3()) {
         Serial.println("[Audio] reset MP3 success");
@@ -264,7 +267,7 @@ void checkHeartbeats() {
   if (!isRegistered) return;
   unsigned long now = millis();
   
-  if (now - last_heartbeat_sent > 1000) {
+  if (now - last_heartbeat_sent > 5000) {
     AppMessage hbMsg;
     hbMsg.type = MSG_TYPE_HEARTBEAT;
     memcpy(hbMsg.box_mac, myMac, 6);
@@ -275,7 +278,7 @@ void checkHeartbeats() {
     last_heartbeat_sent = now;
   }
   
-  if (now - last_received_from_glove > 5000) {
+  if (now - last_received_from_glove > 15000) {
     Serial.println("Glove timeout. Lost registration. Re-searching...");
     isRegistered = false;
     esp_now_del_peer(gloveMac);
