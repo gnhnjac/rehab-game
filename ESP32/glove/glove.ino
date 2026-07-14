@@ -107,25 +107,6 @@ void setup() {
     setupEspNow();
 
 
-    // Load calibration coefficients from Preferences
-    preferences.begin("calibration", true);
-    fsrCalRaw[0] = preferences.getInt("fsr_r0", 4095);
-    fsrCalRaw[1] = preferences.getInt("fsr_r1", 2000);
-    fsrCalRaw[2] = preferences.getInt("fsr_r2", 500);
-    fsrCalGrams[0] = preferences.getInt("fsr_g0", 0);
-    fsrCalGrams[1] = preferences.getInt("fsr_g1", 100);
-    fsrCalGrams[2] = preferences.getInt("fsr_g2", 500);
-    
-    for (int i = 0; i < NUM_FINGERS; i++) {
-        char keyMin[16], keyMax[16];
-        sprintf(keyMin, "fl_min_%d", i);
-        sprintf(keyMax, "fl_max_%d", i);
-        flexMin[i] = preferences.getInt(keyMin, 0);
-        flexMax[i] = preferences.getInt(keyMax, 4095);
-    }
-    isCalibrated = preferences.getBool("is_calibrated", false);
-    preferences.end();
-
     // Create a mutex to protect shared telemetry data across cores
     telemetryMutex = xSemaphoreCreateMutex();
 
@@ -140,9 +121,12 @@ void setup() {
         0                        // Core ID (0 is the Wi-Fi/system core)
     );
 
+    // Load last prescription from NVS
+    loadPrescriptionFromNVS(currentPrescription);
+
     Serial.println("[Glove] Multitasking initialized.");
     Serial.println("[Glove] ESP-NOW initialized. Waiting for Smart Boxes...");
-    Serial.println("[Glove] Press the Calibration Button (GPIO 4) to start calibration.");
+    Serial.println("[Glove] Device ready. Connect from the tablet app to start games.");
 }
 
 void loop() {
@@ -164,28 +148,20 @@ void loop() {
     // Periodically clean up timed-out boxes
     checkBoxTimeouts();
 
-    // Check calibration / start button (now triggered wirelessly via ESP-NOW from Main Box)
+    // Check wireless button press from Main Box
     if (pendingButtonPress) {
         pendingButtonPress = false;
         
         if (sessionState.active) {
-            // If game session is running, button stops it
             Serial.println("[Button] Game session aborted by wireless button press.");
             stopGameSession(false);
         } 
         else if (currentPrescription.gameType != GAME_NONE) {
-            // If prescription is loaded but game is not active, button starts it
             Serial.println("[Button] Starting game session by wireless button press.");
             startNewGameSession();
         } 
         else {
-            // Default calibration mode
-            isCalibrated = false;
-            if (xSemaphoreTake(telemetryMutex, portMAX_DELAY) == pdTRUE) {
-                sharedTelemetry.calibrated = false;
-                xSemaphoreGive(telemetryMutex);
-            }
-            runSensorCalibration(5); // Default 5 seconds
+            Serial.println("[Button] Warning: No last played game prescription found. Please configure a prescription from the app first.");
         }
     }
 
@@ -193,46 +169,37 @@ void loop() {
     if (millis() - lastSampleTime >= sampleInterval) {
         lastSampleTime = millis();
         
-        if (isCalibrated) {
-            int flexRaw[NUM_FINGERS];
-            int flexPercent[NUM_FINGERS];
-            int forceRaw = 0;
-            int forcePercent = 0;
-            readAllSensors(flexRaw, flexPercent, forceRaw, forcePercent);
+        int flexRaw[NUM_FINGERS];
+        int flexPercent[NUM_FINGERS];
+        int forceRaw = 0;
+        int forcePercent = 0;
+        readAllSensors(flexRaw, flexPercent, forceRaw, forcePercent);
 
-            // Safely write the fresh readings to the shared structure
-            if (xSemaphoreTake(telemetryMutex, 0) == pdTRUE) {
-                sharedTelemetry.calibrated = true;
-                memcpy(sharedTelemetry.flexRaw, flexRaw, sizeof(flexRaw));
-                memcpy(sharedTelemetry.flexPercent, flexPercent, sizeof(flexPercent));
-                sharedTelemetry.forceRaw = forceRaw;
-                sharedTelemetry.forcePercent = forcePercent;
-                xSemaphoreGive(telemetryMutex);
-            }
+        // Safely write the fresh readings to the shared structure
+        if (xSemaphoreTake(telemetryMutex, 0) == pdTRUE) {
+            sharedTelemetry.calibrated = isCalibrated;
+            memcpy(sharedTelemetry.flexRaw, flexRaw, sizeof(flexRaw));
+            memcpy(sharedTelemetry.flexPercent, flexPercent, sizeof(flexPercent));
+            sharedTelemetry.forceRaw = forceRaw;
+            sharedTelemetry.forcePercent = forcePercent;
+            xSemaphoreGive(telemetryMutex);
+        }
 
-            // Print standard serial output for debugging at the print interval
-            if (millis() - lastPrintTime >= printInterval) {
-                lastPrintTime = millis();
-                Serial.print("Flex: [");
-                for (int i = 0; i < NUM_FINGERS; i++) {
-                    Serial.print(flexPercent[i]);
-                    if (i < NUM_FINGERS - 1) Serial.print("%, ");
-                }
-                Serial.printf("%%] | Force (FSR): %d%%\n", forcePercent);
-                printRegistry();
+        // Print standard serial output for debugging at the print interval
+        if (millis() - lastPrintTime >= printInterval) {
+            lastPrintTime = millis();
+            Serial.print("Raw: [");
+            for (int i = 0; i < NUM_FINGERS; i++) {
+                Serial.print(flexRaw[i]);
+                if (i < NUM_FINGERS - 1) Serial.print(", ");
             }
-        } 
-        else {
-            // Uncalibrated state
-            if (xSemaphoreTake(telemetryMutex, 0) == pdTRUE) {
-                sharedTelemetry.calibrated = false;
-                xSemaphoreGive(telemetryMutex);
+            Serial.printf("] | Flex %%: [");
+            for (int i = 0; i < NUM_FINGERS; i++) {
+                Serial.print(flexPercent[i]);
+                if (i < NUM_FINGERS - 1) Serial.print("%, ");
             }
-            
-            if (millis() - lastPrintTime >= printInterval) {
-                lastPrintTime = millis();
-                Serial.println("[Glove] Awaiting sensor calibration. Press the button to begin.");
-            }
+            Serial.printf("%%] | Force Raw: %d | Force %%: %d%%\n", forceRaw, forcePercent);
+            printRegistry();
         }
     }
     

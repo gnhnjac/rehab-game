@@ -38,6 +38,124 @@ struct CommandEvent {
     int time;
     volatile bool pending;
 };
+
+inline void savePrescriptionToNVS(const GamePrescription& rx) {
+    preferences.begin("last_rx", false);
+    preferences.putInt("gameType", (int)rx.gameType);
+    preferences.putInt("timer", rx.timerSeconds);
+    preferences.putInt("cycles", rx.totalCycles);
+    preferences.putInt("difficulty", rx.difficulty);
+    preferences.putInt("targetWeight", rx.targetWeightGrams);
+    preferences.putInt("holdTime", rx.requiredHoldTimeSeconds);
+    
+    // active fingers
+    String fingers = "";
+    for (int i = 0; i < NUM_FINGERS; i++) {
+        fingers += String(rx.activeFingers[i]);
+    }
+    preferences.putString("fingers", fingers);
+    
+    // required ROM
+    String rom = "";
+    for (int i = 0; i < NUM_FINGERS; i++) {
+        rom += String(rx.requiredRom[i]);
+        if (i < NUM_FINGERS - 1) rom += ",";
+    }
+    preferences.putString("rom", rom);
+    
+    // sequence
+    String seq = "";
+    for (int i = 0; i < rx.sequenceCount; i++) {
+        seq += String(rx.sequence[i]);
+        if (i < rx.sequenceCount - 1) seq += ",";
+    }
+    preferences.putString("seq", seq);
+    preferences.putInt("seqCount", rx.sequenceCount);
+    
+    // Cubes parameters
+    preferences.putInt("cubesCount", rx.cubesCount);
+    for (int i = 0; i < rx.cubesCount; i++) {
+        char keyPrefix[16];
+        sprintf(keyPrefix, "c_%d_", i);
+        
+        String uidHex = "";
+        for (int j = 0; j < rx.cubes[i].uid_len; j++) {
+            char hex[3];
+            sprintf(hex, "%02X", rx.cubes[i].uid[j]);
+            uidHex += hex;
+        }
+        preferences.putString((String(keyPrefix) + "uid").c_str(), uidHex);
+        preferences.putString((String(keyPrefix) + "color").c_str(), rx.cubes[i].color);
+        preferences.putString((String(keyPrefix) + "shape").c_str(), rx.cubes[i].shape);
+        preferences.putInt((String(keyPrefix) + "weight").c_str(), rx.cubes[i].weightGrams);
+    }
+    preferences.end();
+    Serial.println("[NVS] Saved active prescription to NVS.");
+}
+
+inline void loadPrescriptionFromNVS(GamePrescription& rx) {
+    preferences.begin("last_rx", true);
+    rx.gameType = (GameType)preferences.getInt("gameType", 0);
+    if (rx.gameType == GAME_NONE) {
+        preferences.end();
+        return;
+    }
+    rx.timerSeconds = preferences.getInt("timer", 60);
+    rx.totalCycles = preferences.getInt("cycles", 3);
+    rx.difficulty = preferences.getInt("difficulty", 1);
+    rx.targetWeightGrams = preferences.getInt("targetWeight", 100);
+    rx.requiredHoldTimeSeconds = preferences.getInt("holdTime", 5);
+    
+    String fingers = preferences.getString("fingers", "00000");
+    for (int i = 0; i < NUM_FINGERS && i < fingers.length(); i++) {
+        rx.activeFingers[i] = fingers.charAt(i) - '0';
+    }
+    
+    String romStr = preferences.getString("rom", "0,0,0,0,0");
+    int idx = 0;
+    int start = 0;
+    for (int i = 0; i <= romStr.length() && idx < NUM_FINGERS; i++) {
+        if (i == romStr.length() || romStr.charAt(i) == ',') {
+            rx.requiredRom[idx++] = romStr.substring(start, i).toInt();
+            start = i + 1;
+        }
+    }
+    
+    String seqStr = preferences.getString("seq", "");
+    rx.sequenceCount = preferences.getInt("seqCount", 0);
+    if (seqStr.length() > 0) {
+        int seqIdx = 0;
+        start = 0;
+        for (int i = 0; i <= seqStr.length() && seqIdx < NUM_FINGERS; i++) {
+            if (i == seqStr.length() || seqStr.charAt(i) == ',') {
+                rx.sequence[seqIdx++] = seqStr.substring(start, i).toInt();
+                start = i + 1;
+            }
+        }
+        rx.sequenceCount = seqIdx;
+    }
+    
+    rx.cubesCount = preferences.getInt("cubesCount", 0);
+    for (int i = 0; i < rx.cubesCount; i++) {
+        char keyPrefix[16];
+        sprintf(keyPrefix, "c_%d_", i);
+        
+        String uidHex = preferences.getString((String(keyPrefix) + "uid").c_str(), "");
+        rx.cubes[i].uid_len = 0;
+        for (int k = 0; k < uidHex.length() && rx.cubes[i].uid_len < MAX_CUBE_UID_LEN; k += 2) {
+            String byteHex = uidHex.substring(k, k+2);
+            rx.cubes[i].uid[rx.cubes[i].uid_len++] = (uint8_t)strtol(byteHex.c_str(), NULL, 16);
+        }
+        
+        String color = preferences.getString((String(keyPrefix) + "color").c_str(), "Red");
+        String shape = preferences.getString((String(keyPrefix) + "shape").c_str(), "circle");
+        strncpy(rx.cubes[i].color, color.c_str(), sizeof(rx.cubes[i].color) - 1);
+        strncpy(rx.cubes[i].shape, shape.c_str(), sizeof(rx.cubes[i].shape) - 1);
+        rx.cubes[i].weightGrams = preferences.getInt((String(keyPrefix) + "weight").c_str(), 100);
+    }
+    preferences.end();
+    Serial.printf("[NVS] Loaded last prescription from NVS. GameType: %d\n", rx.gameType);
+}
 extern CommandEvent pendingCommand;
 
 
@@ -527,6 +645,9 @@ inline void handleActivePrescription() {
     
     currentPrescription = rx;
     Serial.printf("[Rx] Received game prescription. GameType: %d\n", rx.gameType);
+    
+    // Save to NVS persistently
+    savePrescriptionToNVS(rx);
     
     String patientId = server.arg("patientId");
     if (patientId.length() > 0) {

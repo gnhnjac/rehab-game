@@ -34,8 +34,8 @@ class DirectTelemetryService implements TelemetryService {
     
     _logController.add("[DirectTelemetry] Connecting to Glove at http://$gloveHost...");
     
-    // Start polling at 8Hz (125ms)
-    _pollingTimer = Timer.periodic(const Duration(milliseconds: 125), (timer) async {
+    // Start polling at ~3.3Hz (300ms) to ensure connection stability
+    _pollingTimer = Timer.periodic(const Duration(milliseconds: 300), (timer) async {
       if (_isPolling) return; // Prevent overlapping requests
       _isPolling = true;
       await _pollTelemetry();
