@@ -301,13 +301,16 @@ class _ExerciseControlScreenState extends State<ExerciseControlScreen> {
                     ? 'Flex'
                     : (widget.prescription.type == GameType.cubesBoxes ? 'Status' : 'Force'),
                 widget.prescription.type == GameType.bend
-                    ? (t != null && t!.flex.percent.isNotEmpty
-                        ? '${t!.flex.percent.reduce((a, b) => a > b ? a : b)}%'
+                    ? (t != null && t!.flex.percent.length >= 5
+                        ? t!.flex.percent.map((p) => '$p%').join(' ')
                         : '—')
                     : (widget.prescription.type == GameType.cubesBoxes
                         ? 'Active'
-                        : (t != null && t!.force.percent.isNotEmpty ? '${t!.force.percent.first}g' : '—')),
+                        : (t != null && t!.force.raw.isNotEmpty
+                            ? '${_calculateFsrGrams(t!.force.raw.first).round()}g'
+                            : '—')),
                 color,
+                fontSize: widget.prescription.type == GameType.bend ? 12 : 24,
               ),
             ],
           ),
@@ -335,11 +338,18 @@ class _ExerciseControlScreenState extends State<ExerciseControlScreen> {
     );
   }
 
-  Widget _buildStat(String label, String value, Color color) {
+  double _calculateFsrGrams(int raw) {
+    if (raw >= 4000) return 0.0;
+    double x = raw.toDouble();
+    double grams = (((-1.47891421e-07 * x + 1.13881999e-03) * x + -2.84335776e+00) * x + 2.66788197e+03) + 100.0;
+    return grams < 0.0 ? 0.0 : grams;
+  }
+
+  Widget _buildStat(String label, String value, Color color, {double fontSize = 24}) {
     return Column(
       children: [
         Text(value,
-            style: TextStyle(color: color, fontSize: 24, fontWeight: FontWeight.bold, fontFamily: 'monospace')),
+            style: TextStyle(color: color, fontSize: fontSize, fontWeight: FontWeight.bold, fontFamily: 'monospace')),
         const SizedBox(height: 4),
         Text(label, style: TextStyle(color: Colors.grey[400], fontSize: 12)),
       ],

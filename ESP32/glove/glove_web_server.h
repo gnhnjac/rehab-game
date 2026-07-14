@@ -398,9 +398,25 @@ inline void handleCalibrateSensor() {
     
     String sensorType = server.arg("sensorType");
     if (sensorType == "force") {
-        Serial.println("[Calib] Force sensor calibration requested (bypassed on Glove, direct grams used).");
-        server.send(200, "text/plain", "Force sensor calibration bypassed on Glove");
-        return;
+        int fMin = server.arg("forceMin").toInt();
+        int fMax = server.arg("forceMax").toInt();
+        
+        if (fMin > 0 && fMax > 0) {
+            forceMin = fMin;
+            forceMax = fMax;
+            isCalibrated = true;
+            
+            preferences.begin("calib", false);
+            preferences.putInt("fo_min", forceMin);
+            preferences.putInt("fo_max", forceMax);
+            preferences.putBool("is_cal", isCalibrated);
+            preferences.end();
+            
+            Serial.printf("[Calib] Saved force: Min=%d, Max=%d\n", forceMin, forceMax);
+            server.send(200, "text/plain", "Force sensor calibration saved");
+            return;
+        }
+        server.send(400, "text/plain", "Invalid force parameters");
     }
     else if (sensorType == "flex") {
         int fingerIdx = server.arg("fingerIndex").toInt();
