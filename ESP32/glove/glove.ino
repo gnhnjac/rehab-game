@@ -48,6 +48,7 @@ bool isCalibrated = false;
 // Global Game Variables
 GamePrescription currentPrescription;
 GameSessionState sessionState;
+bool lastSessionCompletedSuccess = false;
 
 // Piecewise linear force calibration coefficients (raw ADC -> grams)
 int fsrCalRaw[3] = {4095, 2000, 500};

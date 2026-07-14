@@ -72,7 +72,7 @@ class _ExerciseControlScreenState extends State<ExerciseControlScreen> {
       if (!t.sessionActive && _gameRunning) {
         _gameRunning = false;
         _sessionStarted = false;
-        _showSessionFinishedDialog(t.successCount, t.failureCount);
+        _showSessionFinishedDialog(t.successCount, t.failureCount, t.sessionCompletedSuccess);
       }
       
       setState(() => _latest = t);
@@ -106,7 +106,10 @@ class _ExerciseControlScreenState extends State<ExerciseControlScreen> {
         cubes: cubes,
       );
       if (!mounted) return;
-      setState(() => _sessionStarted = true);
+      setState(() {
+        _sessionStarted = true;
+        _gameRunning = true;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('Exercise started on glove'),
@@ -117,6 +120,31 @@ class _ExerciseControlScreenState extends State<ExerciseControlScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Could not start: $e'), backgroundColor: Colors.redAccent),
+      );
+    } finally {
+      if (mounted) setState(() => _starting = false);
+    }
+  }
+
+  Future<void> _stopExercise() async {
+    setState(() => _starting = true);
+    try {
+      await _api.stopActivePrescription();
+      if (!mounted) return;
+      setState(() {
+        _sessionStarted = false;
+        _gameRunning = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Exercise stopped'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not stop: $e'), backgroundColor: Colors.redAccent),
       );
     } finally {
       if (mounted) setState(() => _starting = false);
@@ -312,27 +340,34 @@ class _ExerciseControlScreenState extends State<ExerciseControlScreen> {
   }
 
   Widget _buildStartButton(Color color) {
+    final bool active = _gameRunning || _sessionStarted;
     return ElevatedButton.icon(
-      onPressed: _starting ? null : _startExercise,
+      onPressed: _starting
+          ? null
+          : active
+              ? _stopExercise
+              : _startExercise,
       style: ElevatedButton.styleFrom(
-        backgroundColor: color,
+        backgroundColor: active ? Colors.redAccent : color,
         foregroundColor: Colors.white,
         padding: const EdgeInsets.all(18),
       ),
       icon: _starting
           ? const SizedBox(
-              width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-          : Icon(_sessionStarted ? Icons.refresh_rounded : Icons.play_arrow_rounded),
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+            )
+          : Icon(active ? Icons.stop_rounded : Icons.play_arrow_rounded),
       label: Text(_starting
           ? 'Starting…'
-          : _sessionStarted
-              ? 'Restart exercise'
+          : active
+              ? 'Stop exercise'
               : 'Start exercise'),
     );
   }
 
-  void _showSessionFinishedDialog(int successes, int failures) {
-    final completedSuccess = successes >= widget.prescription.cycles;
+  void _showSessionFinishedDialog(int successes, int failures, bool completedSuccess) {
     final color = completedSuccess ? Colors.greenAccent : Colors.redAccent;
 
     showDialog(

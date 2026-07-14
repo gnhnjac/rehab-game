@@ -179,5 +179,6 @@ struct GameSessionState {
 
 extern GameSessionState sessionState;
 extern GamePrescription currentPrescription;
+extern bool lastSessionCompletedSuccess;
 
 

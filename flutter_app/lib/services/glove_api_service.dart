@@ -136,6 +136,16 @@ class GloveApiService {
       throw GloveApiException('active-prescription failed: HTTP ${response.statusCode} ${response.body}');
     }
   }
+
+  /// Sends a command to explicitly stop any running prescription game on the glove
+  Future<void> stopActivePrescription() async {
+    final response = await http
+        .post(_uri('/api/active-prescription', {'gameType': '0'}))
+        .timeout(const Duration(seconds: 3));
+    if (response.statusCode != 200) {
+      throw GloveApiException('stop-prescription failed: HTTP ${response.statusCode} ${response.body}');
+    }
+  }
 }
 
 class RawSensors {

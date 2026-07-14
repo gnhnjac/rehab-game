@@ -224,6 +224,7 @@ inline void handleTelemetry() {
     json += "\"failure_count\":" + String(sessionState.failureCount) + ",";
     json += "\"current_cycle\":" + String(sessionState.currentCycle) + ",";
     json += "\"game_type\":" + String(currentPrescription.gameType) + ",";
+    json += "\"session_completed_success\":" + String(lastSessionCompletedSuccess ? "true" : "false") + ",";
     
     // flex group
     json += "\"flex\":{";

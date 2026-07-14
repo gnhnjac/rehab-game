@@ -256,6 +256,7 @@ inline void startNewGameSession() {
     sessionState.lastCountdownTime = millis();
     sessionState.currentCycle = 0;
     sessionState.successCount = 0;
+    lastSessionCompletedSuccess = false;
     sessionState.failureCount = 0;
     sessionState.totalResponseTimeMs = 0;
     sessionState.lastActionTime = millis();
@@ -317,6 +318,7 @@ inline void startNewGameSession() {
 inline void stopGameSession(bool completedSuccessfully) {
     if (!sessionState.active) return;
     sessionState.active = false;
+    lastSessionCompletedSuccess = completedSuccessfully;
     
     Serial.println("[Game] Session finished.");
     
@@ -328,6 +330,8 @@ inline void stopGameSession(bool completedSuccessfully) {
     
     // Play end prompt
     if (completedSuccessfully) {
+        playSuccessSound(); // Say "הצלחה" at the end!
+        delay(1200);
         playCompletionSound();
         sendSuccessFlashToBoxes();
     } else {
@@ -398,7 +402,7 @@ inline void handleLocalNfcEvent(String cubeId, int boxIndex, bool isPlaced, cons
                     sessionState.totalResponseTimeMs += (millis() - sessionState.lastActionTime);
                     sessionState.currentCycle++;
                     
-                    playSuccessSound();
+                    // playSuccessSound(); // Removed mid-game to prevent jingle interruption
                     sendSuccessFlashToBoxes();
                     
                     if (sessionState.currentCycle >= currentPrescription.totalCycles) {
@@ -430,7 +434,7 @@ inline void handleLocalNfcEvent(String cubeId, int boxIndex, bool isPlaced, cons
                     sessionState.totalResponseTimeMs += (millis() - sessionState.lastActionTime);
                     sessionState.currentCycle++;
                     
-                    playSuccessSound();
+                    // playSuccessSound(); // Removed mid-game to prevent jingle interruption
                     sendSuccessFlashToBoxes();
                     
                     if (sessionState.currentCycle >= currentPrescription.totalCycles) {
@@ -463,7 +467,7 @@ inline void handleLocalNfcEvent(String cubeId, int boxIndex, bool isPlaced, cons
                     sessionState.totalResponseTimeMs += (millis() - sessionState.lastActionTime);
                     sessionState.currentCycle++;
                     
-                    playSuccessSound();
+                    // playSuccessSound(); // Removed mid-game to prevent jingle interruption
                     sendSuccessFlashToBoxes();
                     
                     if (sessionState.currentCycle >= currentPrescription.totalCycles) {
@@ -596,7 +600,7 @@ inline void updateGame() {
                     sessionState.isHolding = false;
                     
                     stopHapticContinuous();
-                    playSuccessSound();
+                    // playSuccessSound(); // Removed mid-game to prevent jingle interruption
                     sendSuccessFlashToBoxes();
                     
                     if (sessionState.currentCycle >= currentPrescription.totalCycles) {
@@ -658,7 +662,7 @@ inline void updateGame() {
                                   sessionState.currentStepInSequence, activeFingerIndex + 1);
                     
                     stopHapticContinuous();
-                    playSuccessSound();
+                    // playSuccessSound(); // Removed mid-game to prevent jingle interruption
                     sessionState.isHolding = false;
                     
                     sessionState.currentStepInSequence++;
