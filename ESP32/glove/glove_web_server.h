@@ -535,6 +535,16 @@ inline void handleActivePrescription() {
         }
     }
     
+    if (rx.gameType == GAME_NONE) {
+        if (sessionState.active) {
+            stopGameSession(false);
+        }
+        currentPrescription = rx;
+        savePrescriptionToNVS(rx);
+        server.send(200, "text/plain", "Game stopped");
+        return;
+    }
+
     currentPrescription = rx;
     savePrescriptionToNVS(rx); // Persist received prescription!
     Serial.printf("[Rx] Received prescription: type=%d, cycles=%d, timer=%d, diff=%d, targetWeight=%d, holdTime=%d\n",

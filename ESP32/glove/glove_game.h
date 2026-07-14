@@ -283,10 +283,13 @@ inline void selectNextCubesBoxesTarget() {
     uint8_t r, g, b;
     colorToRgb(sessionState.targetCube.color, r, g, b);
     
-    // Turn off all box LEDs, and light up target box
-    uint8_t broadcastMac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-    sendLedColorToBox(broadcastMac, 0, 0, 0);
-    delay(20);
+    // Turn off all box LEDs individually (reliable unicast)
+    for (const auto& pair : boxRegistry) {
+        sendLedColorToBox(pair.second.mac, 0, 0, 0);
+        delay(10);
+    }
+    
+    // Light up target box
     sendLedColorToBox(sessionState.targetBoxMac, r, g, b);
     
     sessionState.lastActionTime = millis();
@@ -375,9 +378,11 @@ inline void stopGameSession(bool completedSuccessfully) {
     
     Serial.println("[Game] Session finished.");
     
-    // Turn off all box LEDs
-    uint8_t broadcastMac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-    sendLedColorToBox(broadcastMac, 0, 0, 0);
+    // Turn off all box LEDs individually (reliable unicast)
+    for (const auto& pair : boxRegistry) {
+        sendLedColorToBox(pair.second.mac, 0, 0, 0);
+        delay(10);
+    }
     
     // Play end prompt
     if (completedSuccessfully) {
@@ -457,14 +462,16 @@ inline void handleLocalNfcEvent(String cubeId, int boxIndex, bool isPlaced, cons
                     if (sessionState.currentCycle >= currentPrescription.totalCycles) {
                         stopGameSession(true);
                     } else {
+                        delay(1500); // 1.5s feedback delay
                         selectNextCubesBoxesTarget();
                     }
                 } else {
                     sessionState.failureCount++;
                     playFailureSound();
-                    sendLedColorToBox(boxMac, 255, 0, 0); // Blink Red
-                    delay(300);
-                    // Reset LED
+                    sendLedColorToBox(boxMac, 255, 0, 0); // Red on wrong box
+                    delay(1000);
+                    sendLedColorToBox(boxMac, 0, 0, 0); // Turn off wrong box
+                    delay(20);
                     uint8_t r, g, b;
                     colorToRgb(sessionState.targetCube.color, r, g, b);
                     sendLedColorToBox(sessionState.targetBoxMac, r, g, b);
@@ -487,13 +494,16 @@ inline void handleLocalNfcEvent(String cubeId, int boxIndex, bool isPlaced, cons
                     if (sessionState.currentCycle >= currentPrescription.totalCycles) {
                         stopGameSession(true);
                     } else {
+                        delay(1500); // 1.5s feedback delay
                         selectNextCubesBoxesTarget();
                     }
                 } else {
                     sessionState.failureCount++;
                     playFailureSound();
-                    sendLedColorToBox(boxMac, 255, 0, 0); // Blink Red
-                    delay(300);
+                    sendLedColorToBox(boxMac, 255, 0, 0); // Red on wrong box
+                    delay(1000);
+                    sendLedColorToBox(boxMac, 0, 0, 0); // Turn off wrong box
+                    delay(20);
                     uint8_t r, g, b;
                     colorToRgb(sessionState.targetCube.color, r, g, b);
                     sendLedColorToBox(sessionState.targetBoxMac, r, g, b);
@@ -517,13 +527,16 @@ inline void handleLocalNfcEvent(String cubeId, int boxIndex, bool isPlaced, cons
                     if (sessionState.currentCycle >= currentPrescription.totalCycles) {
                         stopGameSession(true);
                     } else {
+                        delay(1500); // 1.5s feedback delay
                         selectNextCubesBoxesTarget();
                     }
                 } else {
                     sessionState.failureCount++;
                     playFailureSound();
-                    sendLedColorToBox(boxMac, 255, 0, 0); // Red blink
-                    delay(300);
+                    sendLedColorToBox(boxMac, 255, 0, 0); // Red on wrong box
+                    delay(1000);
+                    sendLedColorToBox(boxMac, 0, 0, 0); // Turn off wrong box
+                    delay(20);
                     uint8_t r, g, b;
                     colorToRgb(sessionState.targetCube.color, r, g, b);
                     sendLedColorToBox(sessionState.targetBoxMac, r, g, b);

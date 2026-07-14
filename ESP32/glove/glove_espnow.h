@@ -351,8 +351,10 @@ inline void sendSuccessFlashToBoxes() {
     msg.event = BOX_CMD_FLASH_SUCCESS;
     msg.uid_len = 0;
     
-    uint8_t broadcastMac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-    esp_now_send(broadcastMac, (uint8_t *)&msg, sizeof(msg));
+    for (const auto& pair : boxRegistry) {
+        esp_now_send(pair.second.mac, (uint8_t *)&msg, sizeof(msg));
+        delay(10);
+    }
 }
 
 inline void sendFailureBlinkToBoxes() {
@@ -361,8 +363,10 @@ inline void sendFailureBlinkToBoxes() {
     msg.event = BOX_CMD_FLASH_FAILURE;
     msg.uid_len = 0;
     
-    uint8_t broadcastMac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-    esp_now_send(broadcastMac, (uint8_t *)&msg, sizeof(msg));
+    for (const auto& pair : boxRegistry) {
+        esp_now_send(pair.second.mac, (uint8_t *)&msg, sizeof(msg));
+        delay(10);
+    }
 }
 
 inline void sendIdentifyToBox(const uint8_t *mac) {
