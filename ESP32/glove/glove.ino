@@ -246,9 +246,28 @@ void loop() {
             }
         } 
         else {
-            // Uncalibrated state
+            // Uncalibrated state - sample raw values so they display in calibration menu
+            int flexRaw[NUM_FINGERS];
+            int flexPercent[NUM_FINGERS] = {0};
+            int forceRaw = 0;
+            int forcePercent = 0;
+
+            for (int i = 0; i < NUM_FINGERS; i++) {
+                int raw = analogRead(flexPins[i]);
+                flexSmoothed[i] = (raw * filterWeight) + (flexSmoothed[i] * (1.0 - filterWeight));
+                flexRaw[i] = (int)flexSmoothed[i];
+            }
+            int rawForce = analogRead(FORCE_PIN);
+            forceSmoothed = (rawForce * filterWeight) + (forceSmoothed * (1.0 - filterWeight));
+            forceRaw = (int)forceSmoothed;
+            forcePercent = (int)getFsrForceGrams(forceRaw);
+
             if (xSemaphoreTake(telemetryMutex, 0) == pdTRUE) {
                 sharedTelemetry.calibrated = false;
+                memcpy(sharedTelemetry.flexRaw, flexRaw, sizeof(flexRaw));
+                memcpy(sharedTelemetry.flexPercent, flexPercent, sizeof(flexPercent));
+                sharedTelemetry.forceRaw = forceRaw;
+                sharedTelemetry.forcePercent = forcePercent;
                 xSemaphoreGive(telemetryMutex);
             }
             

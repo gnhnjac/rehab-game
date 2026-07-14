@@ -264,6 +264,11 @@ inline void startNewGameSession() {
     sessionState.lastActionTime = millis();
     sessionState.isHolding = false;
     sessionState.holdStartTime = 0;
+    if (currentPrescription.gameType == GAME_PINCH && boxRegistry.empty()) {
+        sessionState.isHolding = true;
+        sessionState.holdStartTime = millis();
+        Serial.println("[Game-Pinch] Standalone mode: hold timer starts immediately.");
+    }
     sessionState.lastWarningTime = 0;
     sessionState.currentStepInSequence = 0;
     sessionState.sumSteadyForce = 0;
@@ -407,13 +412,15 @@ inline void handleLocalNfcEvent(String cubeId, int boxIndex, bool isPlaced, cons
                     sessionState.totalResponseTimeMs += (millis() - sessionState.lastActionTime);
                     sessionState.currentCycle++;
                     
-                    // playSuccessSound(); // Removed mid-game to prevent jingle interruption
-                    sendSuccessFlashToBoxes();
+                    // Visual success: Turn correct box white for 1 second
+                    sendLedColorToBox(boxMac, 255, 255, 255);
+                    delay(1000);
+                    sendLedColorToBox(boxMac, 0, 0, 0);
+                    delay(500);
                     
                     if (sessionState.currentCycle >= currentPrescription.totalCycles) {
                         stopGameSession(true);
                     } else {
-                        delay(1500); // 1.5s feedback delay
                         selectNextCubesBoxesTarget();
                     }
                 } else {
@@ -439,13 +446,15 @@ inline void handleLocalNfcEvent(String cubeId, int boxIndex, bool isPlaced, cons
                     sessionState.totalResponseTimeMs += (millis() - sessionState.lastActionTime);
                     sessionState.currentCycle++;
                     
-                    // playSuccessSound(); // Removed mid-game to prevent jingle interruption
-                    sendSuccessFlashToBoxes();
+                    // Visual success: Turn correct box white for 1 second
+                    sendLedColorToBox(boxMac, 255, 255, 255);
+                    delay(1000);
+                    sendLedColorToBox(boxMac, 0, 0, 0);
+                    delay(500);
                     
                     if (sessionState.currentCycle >= currentPrescription.totalCycles) {
                         stopGameSession(true);
                     } else {
-                        delay(1500); // 1.5s feedback delay
                         selectNextCubesBoxesTarget();
                     }
                 } else {
@@ -472,13 +481,15 @@ inline void handleLocalNfcEvent(String cubeId, int boxIndex, bool isPlaced, cons
                     sessionState.totalResponseTimeMs += (millis() - sessionState.lastActionTime);
                     sessionState.currentCycle++;
                     
-                    // playSuccessSound(); // Removed mid-game to prevent jingle interruption
-                    sendSuccessFlashToBoxes();
+                    // Visual success: Turn correct box white for 1 second
+                    sendLedColorToBox(boxMac, 255, 255, 255);
+                    delay(1000);
+                    sendLedColorToBox(boxMac, 0, 0, 0);
+                    delay(500);
                     
                     if (sessionState.currentCycle >= currentPrescription.totalCycles) {
                         stopGameSession(true);
                     } else {
-                        delay(1500); // 1.5s feedback delay
                         selectNextCubesBoxesTarget();
                     }
                 } else {

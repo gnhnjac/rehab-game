@@ -23,7 +23,7 @@ extern int fsrCalGrams[3];
 
 
 inline float getFsrForceGrams(int raw) {
-    if (raw >= 4095) return 0.0f; // FSR idle state (unloaded)
+    if (raw >= 4000) return 0.0f; // FSR idle state (unloaded)
     float x = (float)raw;
     float grams = (((-1.47891421e-07 * x + 1.13881999e-03) * x + -2.84335776e+00) * x + 2.66788197e+03) + 100.0f;
     return grams < 0.0f ? 0.0f : grams; // Clamp negative values
@@ -100,11 +100,17 @@ inline void runSensorCalibration(int seconds) {
         int remaining = seconds - (elapsed / 1000);
         if (remaining < 0) remaining = 0;
 
-        // Safely write countdown telemetry
+        // Safely write live readings to telemetry during calibration so the UI can display them
         if (xSemaphoreTake(telemetryMutex, 0) == pdTRUE) {
             sharedTelemetry.calibrated = false;
             sharedTelemetry.calibrating = true;
             sharedTelemetry.time_remaining = remaining;
+            for (int i = 0; i < NUM_FINGERS; i++) {
+                sharedTelemetry.flexRaw[i] = (int)flexSmoothed[i];
+                sharedTelemetry.flexPercent[i] = 0; // Calibration in progress
+            }
+            sharedTelemetry.forceRaw = (int)forceSmoothed;
+            sharedTelemetry.forcePercent = (int)getFsrForceGrams(sharedTelemetry.forceRaw);
             xSemaphoreGive(telemetryMutex);
         }
 

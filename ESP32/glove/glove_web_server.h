@@ -541,6 +541,20 @@ inline void handleActivePrescription() {
         }
     }
     
+    // Auto-populate sequence if omitted for BEND game
+    if (rx.gameType == GAME_BEND && rx.sequenceCount == 0) {
+        for (int i = 0; i < NUM_FINGERS; i++) {
+            if (rx.activeFingers[i] == 1) {
+                rx.sequence[rx.sequenceCount++] = i + 1;
+            }
+        }
+        if (rx.sequenceCount == 0) {
+            for (int i = 0; i < NUM_FINGERS; i++) {
+                rx.sequence[rx.sequenceCount++] = i + 1;
+            }
+        }
+    }
+    
     if (rx.gameType == GAME_NONE) {
         if (sessionState.active) {
             stopGameSession(false);

@@ -297,8 +297,16 @@ class _ExerciseControlScreenState extends State<ExerciseControlScreen> {
                 color,
               ),
               _buildStat(
-                'Force',
-                t != null && t.force.percent.isNotEmpty ? '${t.force.percent.first}g' : '—',
+                widget.prescription.type == GameType.bend
+                    ? 'Flex'
+                    : (widget.prescription.type == GameType.cubesBoxes ? 'Status' : 'Force'),
+                widget.prescription.type == GameType.bend
+                    ? (t != null && t!.flex.percent.isNotEmpty
+                        ? '${(t!.flex.percent.reduce((a, b) => a + b) / t!.flex.percent.length).round()}%'
+                        : '—')
+                    : (widget.prescription.type == GameType.cubesBoxes
+                        ? 'Active'
+                        : (t != null && t!.force.percent.isNotEmpty ? '${t!.force.percent.first}g' : '—')),
                 color,
               ),
             ],
