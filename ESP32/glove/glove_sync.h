@@ -114,12 +114,16 @@ inline void syncBufferedLogs() {
 
     while (file) {
         String filename = String(file.name());
+        if (filename.startsWith("/")) {
+            filename = filename.substring(1);
+        }
         
         // Match only log files
         if (filename.startsWith("log_") && filename.endsWith(".json")) {
             // Absolute path
             String filepath = "/" + filename;
             Serial.printf("[Sync] Found buffered log: %s. Synchronizing...\n", filepath.c_str());
+
 
             // Read log file content
             String jsonPayload = "";
@@ -163,6 +167,9 @@ inline int getBufferedLogCount() {
     File file = root.openNextFile();
     while (file) {
         String filename = String(file.name());
+        if (filename.startsWith("/")) {
+            filename = filename.substring(1);
+        }
         if (filename.startsWith("log_") && filename.endsWith(".json")) {
             count++;
         }

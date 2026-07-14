@@ -125,7 +125,7 @@ void setup() {
     setupHaptic();
     setupAudio(); // Initialize UART audio module
     setupEspNow();
-    setupWebServer();
+
 
     // Load calibration coefficients from Preferences
     preferences.begin("calibration", true);
