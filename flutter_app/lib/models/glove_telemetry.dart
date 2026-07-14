@@ -76,6 +76,13 @@ class GloveTelemetry {
   final List<BoxAction> boxActions;
   final List<Map<String, String>> boxes;
 
+  // Live session feedback properties
+  final bool sessionActive;
+  final int successCount;
+  final int failureCount;
+  final int currentCycle;
+  final int gameType;
+
   GloveTelemetry({
     required this.calibrated,
     required this.calibrating,
@@ -84,6 +91,11 @@ class GloveTelemetry {
     required this.force,
     required this.boxActions,
     required this.boxes,
+    this.sessionActive = false,
+    this.successCount = 0,
+    this.failureCount = 0,
+    this.currentCycle = 0,
+    this.gameType = 0,
   });
 
   factory GloveTelemetry.fromJson(Map<String, dynamic> json) {
@@ -123,6 +135,11 @@ class GloveTelemetry {
       force: SensorGroup.fromJson(forceJson),
       boxActions: boxActionsList,
       boxes: boxesList,
+      sessionActive: json['session_active'] ?? false,
+      successCount: json['success_count'] ?? 0,
+      failureCount: json['failure_count'] ?? 0,
+      currentCycle: json['current_cycle'] ?? 0,
+      gameType: json['game_type'] ?? 0,
     );
   }
 
@@ -135,6 +152,11 @@ class GloveTelemetry {
       force: SensorGroup(raw: [], percent: []),
       boxActions: [],
       boxes: [],
+      sessionActive: false,
+      successCount: 0,
+      failureCount: 0,
+      currentCycle: 0,
+      gameType: 0,
     );
   }
 
@@ -146,5 +168,10 @@ class GloveTelemetry {
     'force': force.toJson(),
     'weights': Map.fromEntries(boxActions.map((w) => MapEntry(w.cubeId, w.toJson()))),
     'boxes': boxes,
+    'session_active': sessionActive,
+    'success_count': successCount,
+    'failure_count': failureCount,
+    'current_cycle': currentCycle,
+    'game_type': gameType,
   };
 }

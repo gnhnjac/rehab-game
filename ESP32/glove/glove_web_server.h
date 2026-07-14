@@ -219,6 +219,11 @@ inline void handleTelemetry() {
     json += "\"calibrated\":" + String(localData.calibrated ? "true" : "false") + ",";
     json += "\"calibrating\":" + String(localData.calibrating ? "true" : "false") + ",";
     json += "\"time_remaining\":" + String(timeRemaining) + ",";
+    json += "\"session_active\":" + String(sessionState.active ? "true" : "false") + ",";
+    json += "\"success_count\":" + String(sessionState.successCount) + ",";
+    json += "\"failure_count\":" + String(sessionState.failureCount) + ",";
+    json += "\"current_cycle\":" + String(sessionState.currentCycle) + ",";
+    json += "\"game_type\":" + String(currentPrescription.gameType) + ",";
     
     // flex group
     json += "\"flex\":{";
