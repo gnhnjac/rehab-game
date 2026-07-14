@@ -100,28 +100,12 @@ inline uint32_t getEpochTime() {
     return (uint32_t)now;
 }
 
-// Clean trailing slashes from database host to ensure well-formed URLs
-inline String getCleanFirebaseUrl(const String& path) {
-    String host = String(FIREBASE_HOST);
-    host.trim();
-    while (host.endsWith("/")) {
-        host = host.substring(0, host.length() - 1);
-    }
-    return host + path;
-}
-
 // Diagnostic helper to print network status, DNS resolution, and heap on HTTP failure
 inline void printFirebaseErrorDiagnostics(int responseCode) {
     Serial.printf("[Firebase] HTTP Fail Code: %d (%s)\n", 
         responseCode, HTTPClient::errorToString(responseCode).c_str());
 
-    String host = String(FIREBASE_HOST);
-    host.trim();
-    if (host.startsWith("https://")) host = host.substring(8);
-    if (host.startsWith("http://")) host = host.substring(7);
-    int slashIdx = host.indexOf('/');
-    if (slashIdx != -1) host = host.substring(0, slashIdx);
-
+    String host = "firestore.googleapis.com";
     IPAddress resolvedIP;
     if (WiFi.hostByName(host.c_str(), resolvedIP)) {
         Serial.printf("[Firebase] Diagnostics: DNS lookup OK (%s -> %s)\n", 
@@ -134,80 +118,13 @@ inline void printFirebaseErrorDiagnostics(int responseCode) {
     Serial.printf("[Firebase] Diagnostics: Wi-Fi Status = %d (3 = Connected)\n", WiFi.status());
 }
 
+
 inline void uploadLiveTelemetry(bool calibrated, int* flexRaw, int* flexPercent, int forceRaw, int forcePercent) {
-    if (WiFi.status() != WL_CONNECTED) return;
-
-    WiFiClientSecure client;
-    client.setInsecure(); // Bypass SSL verification for HTTPS
-
-    HTTPClient http;
-    String url = getCleanFirebaseUrl("/telemetry.json");
-    http.begin(client, url);
-    http.setTimeout(1500); // 1.5 second timeout to prevent blocking ESP-NOW heartbeats
-    http.addHeader("Content-Type", "application/json");
-
-    String jsonPayload;
-    if (calibrated) {
-        jsonPayload = "{\"calibrated\":true,";
-        
-        // flex group (raw and percent lists)
-        jsonPayload += "\"flex\":{\"raw\":[";
-        for (int i = 0; i < NUM_FINGERS; i++) {
-            jsonPayload += String(flexRaw[i]);
-            if (i < NUM_FINGERS - 1) jsonPayload += ",";
-        }
-        jsonPayload += "],\"percent\":[";
-        for (int i = 0; i < NUM_FINGERS; i++) {
-            jsonPayload += String(flexPercent[i]);
-            if (i < NUM_FINGERS - 1) jsonPayload += ",";
-        }
-        jsonPayload += "]},";
- 
-        // force group
-        jsonPayload += "\"force\":{\"raw\":[" + String(forceRaw) + "],\"percent\":[" + String(forcePercent) + "]}";
-        jsonPayload += "}";
-    } else {
-        jsonPayload = "{\"calibrated\":false}";
-    }
-
-    int httpResponseCode = http.PATCH(jsonPayload);
-    if (httpResponseCode <= 0) {
-        Serial.print("[Firebase] Telemetry upload failed.\n");
-        printFirebaseErrorDiagnostics(httpResponseCode);
-    }
-    http.end();
+    // RTDB Live Telemetry streaming is disabled to prioritize local HTTP server speed.
 }
 
 inline void uploadBoxAction(const String& cubeId, uint32_t timestamp, bool isPlaced, int boxIndex) {
-    if (WiFi.status() != WL_CONNECTED) {
-        Serial.println("[Firebase] Cannot upload BoxAction (Wi-Fi disconnected)");
-        return;
-    }
-
-    WiFiClientSecure client;
-    client.setInsecure(); // Bypass SSL verification for HTTPS
-
-    HTTPClient http;
-    String url = getCleanFirebaseUrl("/telemetry/weights/" + cubeId + ".json");
-    
-    Serial.printf("[Firebase] Uploading BoxAction to URL: %s\n", url.c_str());
-
-    http.begin(client, url);
-    http.setTimeout(1500); // 1.5 second timeout to prevent blocking ESP-NOW heartbeats
-    http.addHeader("Content-Type", "application/json");
-
-    // Tuple structure: [timestamp, isPlaced, boxIndex]
-    String jsonPayload = "[" + String(timestamp) + "," + (isPlaced ? "true" : "false") + "," + String(boxIndex) + "]";
-
-    int httpResponseCode = http.PUT(jsonPayload);
-    if (httpResponseCode > 0) {
-        Serial.printf("[Firebase] BoxAction uploaded successfully: Weight %s -> %s Box %d\n", 
-            cubeId.c_str(), isPlaced ? "Placed" : "Picked Up", boxIndex + 1);
-    } else {
-        Serial.print("[Firebase] BoxAction upload failed.\n");
-        printFirebaseErrorDiagnostics(httpResponseCode);
-    }
-    http.end();
+    // RTDB Box Action uploads are disabled. NFC actions are logged and synced directly to Cloud Firestore.
 }
 
 // Delegated to glove_sync.h
