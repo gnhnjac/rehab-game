@@ -23,40 +23,6 @@ class PatientListScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Patients'),
-        actions: [
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.build_rounded),
-            tooltip: 'Calibration tools',
-            onSelected: (value) {
-              switch (value) {
-                case 'fsr':
-                  Navigator.push(context,
-                      MaterialPageRoute(builder: (_) => const FsrCalibrationScreen()));
-                case 'box':
-                  Navigator.push(context,
-                      MaterialPageRoute(builder: (_) => const BoxCalibrationScreen()));
-              }
-            },
-            itemBuilder: (context) => const [
-              PopupMenuItem(
-                value: 'fsr',
-                child: Row(children: [
-                  Icon(Icons.scale_rounded, size: 18),
-                  SizedBox(width: 10),
-                  Text('FSR calibration'),
-                ]),
-              ),
-              PopupMenuItem(
-                value: 'box',
-                child: Row(children: [
-                  Icon(Icons.grid_view_rounded, size: 18),
-                  SizedBox(width: 10),
-                  Text('Box calibration'),
-                ]),
-              ),
-            ],
-          ),
-        ],
       ),
 
       body: Column(
@@ -128,6 +94,7 @@ class PatientListScreen extends StatelessWidget {
                         title: 'Force Sensor',
                         subtitle: 'Calibrate FSR',
                         color: const Color(0xFF8B5CF6),
+                        enabled: activePatient != null,
                         onTap: () => Navigator.push(context,
                             MaterialPageRoute(builder: (_) => const FsrCalibrationScreen())),
                       ),
@@ -140,6 +107,7 @@ class PatientListScreen extends StatelessWidget {
                         title: 'Flex Sensors',
                         subtitle: 'Patient Range',
                         color: const Color(0xFF3B82F6),
+                        enabled: activePatient != null,
                         onTap: () => Navigator.push(context,
                             MaterialPageRoute(builder: (_) => const FlexCalibrationScreen())),
                       ),
@@ -274,45 +242,58 @@ class PatientListScreen extends StatelessWidget {
     required String subtitle,
     required Color color,
     required VoidCallback onTap,
+    bool enabled = true,
   }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF141722),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFF232A3D)),
-      ),
-      child: Material(
-        color: Colors.transparent,
-        borderRadius: BorderRadius.circular(14),
-        child: InkWell(
+    return Opacity(
+      opacity: enabled ? 1.0 : 0.35,
+      child: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFF141722),
           borderRadius: BorderRadius.circular(14),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.12),
-                    shape: BoxShape.circle,
+          border: Border.all(color: const Color(0xFF232A3D)),
+        ),
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(14),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: enabled
+                ? onTap
+                : () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Please select an active patient from the list below before calibrating.'),
+                        backgroundColor: Colors.redAccent,
+                      ),
+                    );
+                  },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: color.withOpacity(0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(icon, color: color, size: 22),
                   ),
-                  child: Icon(icon, color: color, size: 22),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  title,
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: const TextStyle(color: Colors.grey, fontSize: 10),
-                  textAlign: TextAlign.center,
-                ),
-              ],
+                  const SizedBox(height: 6),
+                  Text(
+                    title,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(color: Colors.grey, fontSize: 10),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
             ),
           ),
         ),

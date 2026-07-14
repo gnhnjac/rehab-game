@@ -4,6 +4,7 @@ import '../models/game_prescription.dart';
 import '../models/patient.dart';
 import '../repositories/patient_repository.dart';
 import '../services/glove_api_service.dart';
+import '../services/telemetry_provider.dart';
 
 class AppState extends ChangeNotifier {
   final PatientRepository repository;
@@ -54,6 +55,14 @@ class AppState extends ChangeNotifier {
   Future<void> setActivePatient(String patientId) async {
     _activePatientId = patientId;
     notifyListeners();
+    
+    final service = TelemetryProvider.getService();
+    if (!service.isConnected) {
+      if (kDebugMode) {
+        print("Glove is offline, skipped active patient calibration sync.");
+      }
+      return;
+    }
     
     try {
       final patient = _patients.firstWhere((p) => p.id == patientId);
