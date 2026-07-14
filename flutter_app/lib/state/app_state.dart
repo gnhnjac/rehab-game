@@ -66,13 +66,7 @@ class AppState extends ChangeNotifier {
     
     final api = GloveApiService();
     
-    // Quick check to see if Glove is reachable before executing sequential calibration requests
-    try {
-      await api.fetchRawSensors().timeout(const Duration(milliseconds: 1200));
-    } catch (e) {
-      throw Exception("Glove is unreachable (ping failed): $e");
-    }
-    
+
     final patient = _patients.firstWhere((p) => p.id == patientId);
     final cal = patient.calibration;
     

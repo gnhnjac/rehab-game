@@ -19,6 +19,7 @@ class _FsrCalibrationScreenState extends State<FsrCalibrationScreen> {
 
   final GloveApiService _api = GloveApiService();
   StreamSubscription? _telemetrySub;
+  Timer? _pollTimer;
   int _liveRaw = 4095;
   bool _online = false;
   bool _saving = false;
@@ -30,13 +31,31 @@ class _FsrCalibrationScreenState extends State<FsrCalibrationScreen> {
   void initState() {
     super.initState();
     TelemetryProvider.getService().disconnect(); // Stop background polling
-    _online = true; // Assume online for initial capture
+    _online = true;
+    _startSlowPoll();
   }
 
   @override
   void dispose() {
+    _pollTimer?.cancel();
     TelemetryProvider.getService().connect(); // Restart background polling
     super.dispose();
+  }
+
+  void _startSlowPoll() {
+    _pollTimer = Timer.periodic(const Duration(milliseconds: 1500), (_) async {
+      try {
+        final raw = await _api.fetchRawSensors();
+        if (mounted) {
+          setState(() {
+            _liveRaw = raw.forceRaw;
+            _online = true;
+          });
+        }
+      } catch (_) {
+        if (mounted) setState(() => _online = false);
+      }
+    });
   }
 
   Future<void> _captureRest() async {
@@ -121,9 +140,6 @@ class _FsrCalibrationScreenState extends State<FsrCalibrationScreen> {
       final Map<String, dynamic> calData = {
         'flex_min': activePatient.calibration['flex_min'] ?? [0, 0, 0, 0, 0],
         'flex_max': activePatient.calibration['flex_max'] ?? [4095, 4095, 4095, 4095, 4095],
-        'fsr_coef_a': activePatient.calibration['fsr_coef_a'] ?? 0.0,
-        'fsr_coef_b': activePatient.calibration['fsr_coef_b'] ?? 0.0,
-        'fsr_coef_c': activePatient.calibration['fsr_coef_c'] ?? 0.0,
         'fo_min': _capturedMin!,
         'fo_max': _capturedMax!,
       };
@@ -364,7 +380,14 @@ class _FsrCalibrationScreenState extends State<FsrCalibrationScreen> {
                         onPressed: _saving ? null : _saveCalibration,
                         child: _saving
                             ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                            : const Text('Save Force Limits to Patient', style: TextStyle(fontWeight: FontWeight.bold)),
+                            : const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.save, color: Colors.white),
+                                  SizedBox(width: 8),
+                                  Text('SAVE CALIBRATION', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
+                                ],
+                              ),
                       ),
                     ),
                   ],

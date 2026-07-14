@@ -32,11 +32,10 @@ class FirestoreService {
       'name': name,
       'createdAt': FieldValue.serverTimestamp(),
       'calibration': {
-        'fsr_coef_a': 0.0,
-        'fsr_coef_b': 0.0,
-        'fsr_coef_c': 0.0,
         'flex_min': [0, 0, 0, 0, 0],
         'flex_max': [4095, 4095, 4095, 4095, 4095],
+        'fo_min': 4095,
+        'fo_max': 0,
       },
       'prescription': {
         'cubesBoxes': {

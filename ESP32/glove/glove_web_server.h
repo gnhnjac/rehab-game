@@ -423,7 +423,7 @@ inline void handleCalibrateSensor() {
         int fMin = server.arg("flexMin").toInt();
         int fMax = server.arg("flexMax").toInt();
         
-        if (fingerIdx >= 0 && fingerIdx < NUM_FINGERS && fMax > fMin) {
+        if (fingerIdx >= 0 && fingerIdx < NUM_FINGERS && fMin >= 0 && fMax >= 0 && fMin != fMax) {
             flexMin[fingerIdx] = fMin;
             flexMax[fingerIdx] = fMax;
             isCalibrated = true;

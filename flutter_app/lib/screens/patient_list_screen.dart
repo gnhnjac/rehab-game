@@ -71,7 +71,7 @@ class PatientListScreen extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         activePatient != null
-                            ? 'Active: ${activePatient.name}'
+                            ? 'Active: ${activePatient.name} (ID: ${activePatient.id})'
                             : 'No active patient selected',
                         style: TextStyle(color: Colors.white.withOpacity(0.85), fontSize: 13),
                       ),

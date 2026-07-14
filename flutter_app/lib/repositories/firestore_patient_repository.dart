@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import '../models/game_prescription.dart';
 import '../models/patient.dart';
 import 'patient_repository.dart';
@@ -45,9 +46,6 @@ class FirestorePatientRepository implements PatientRepository {
     final parsedCalibration = {
       'flex_min': (calibration['flex_min'] as List?)?.map((e) => (e as num).toInt()).toList() ?? [0, 0, 0, 0, 0],
       'flex_max': (calibration['flex_max'] as List?)?.map((e) => (e as num).toInt()).toList() ?? [4095, 4095, 4095, 4095, 4095],
-      'fsr_coef_a': (calibration['fsr_coef_a'] as num? ?? 0.0).toDouble(),
-      'fsr_coef_b': (calibration['fsr_coef_b'] as num? ?? 0.0).toDouble(),
-      'fsr_coef_c': (calibration['fsr_coef_c'] as num? ?? 0.0).toDouble(),
       'fo_min': (calibration['fo_min'] as num? ?? 4095).toInt(),
       'fo_max': (calibration['fo_max'] as num? ?? 0).toInt(),
     };
@@ -85,9 +83,8 @@ class FirestorePatientRepository implements PatientRepository {
       'calibration': {
         'flex_min': [0, 0, 0, 0, 0],
         'flex_max': [4095, 4095, 4095, 4095, 4095],
-        'fsr_coef_a': 0.0,
-        'fsr_coef_b': 0.0,
-        'fsr_coef_c': 0.0,
+        'fo_min': 4095,
+        'fo_max': 0,
       },
       'prescription': {
         'cubesBoxes': {
@@ -106,7 +103,7 @@ class FirestorePatientRepository implements PatientRepository {
       }
     });
 
-    final doc = await docRef.get(const GetOptions(source: Source.cache));
+    final doc = await docRef.get();
     return _mapDocToPatient(doc);
   }
 
@@ -150,16 +147,17 @@ class FirestorePatientRepository implements PatientRepository {
     }
 
     await _db.collection('patients').doc(patientId).update(updateMap);
-    final doc = await _db.collection('patients').doc(patientId).get(const GetOptions(source: Source.cache));
+    final doc = await _db.collection('patients').doc(patientId).get();
     return _mapDocToPatient(doc);
   }
 
   @override
   Future<Patient> updateCalibration(String patientId, Map<String, dynamic> calibration) async {
+    debugPrint("Firestore WRITE: collection('patients').doc('$patientId').update({'calibration': $calibration})");
     await _db.collection('patients').doc(patientId).update({
       'calibration': calibration,
     });
-    final doc = await _db.collection('patients').doc(patientId).get(const GetOptions(source: Source.cache));
+    final doc = await _db.collection('patients').doc(patientId).get();
     return _mapDocToPatient(doc);
   }
 }
