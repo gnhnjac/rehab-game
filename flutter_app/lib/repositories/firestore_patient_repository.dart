@@ -106,7 +106,7 @@ class FirestorePatientRepository implements PatientRepository {
       }
     });
 
-    final doc = await docRef.get();
+    final doc = await docRef.get(const GetOptions(source: Source.cache));
     return _mapDocToPatient(doc);
   }
 
@@ -150,7 +150,7 @@ class FirestorePatientRepository implements PatientRepository {
     }
 
     await _db.collection('patients').doc(patientId).update(updateMap);
-    final doc = await _db.collection('patients').doc(patientId).get();
+    final doc = await _db.collection('patients').doc(patientId).get(const GetOptions(source: Source.cache));
     return _mapDocToPatient(doc);
   }
 
@@ -159,7 +159,7 @@ class FirestorePatientRepository implements PatientRepository {
     await _db.collection('patients').doc(patientId).update({
       'calibration': calibration,
     });
-    final doc = await _db.collection('patients').doc(patientId).get();
+    final doc = await _db.collection('patients').doc(patientId).get(const GetOptions(source: Source.cache));
     return _mapDocToPatient(doc);
   }
 }

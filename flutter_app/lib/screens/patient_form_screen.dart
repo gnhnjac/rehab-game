@@ -48,16 +48,27 @@ class _PatientFormScreenState extends State<PatientFormScreen> {
     final notes = notesText.isEmpty ? null : notesText;
 
     final appState = AppStateScope.of(context);
-    if (_isEditing) {
-      await appState.updatePatient(
-        widget.existingPatient!.copyWith(name: name, age: age, notes: notes),
-      );
-    } else {
-      await appState.addPatient(name: name, age: age, notes: notes);
-    }
+    try {
+      if (_isEditing) {
+        await appState.updatePatient(
+          widget.existingPatient!.copyWith(name: name, age: age, notes: notes),
+        );
+      } else {
+        await appState.addPatient(name: name, age: age, notes: notes);
+      }
 
-    if (mounted) {
-      Navigator.pop(context, true);
+      if (mounted) {
+        Navigator.pop(context, true);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to save patient: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
     }
   }
 
