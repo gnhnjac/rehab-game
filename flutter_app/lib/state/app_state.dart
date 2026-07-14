@@ -56,10 +56,14 @@ class AppState extends ChangeNotifier {
     _activePatientId = patientId;
     notifyListeners();
     
-    final service = TelemetryProvider.getService();
-    if (!service.isConnected) {
+    final api = GloveApiService();
+    
+    // Quick check to see if Glove is reachable before executing sequential calibration requests
+    try {
+      await api.fetchRawSensors().timeout(const Duration(milliseconds: 400));
+    } catch (e) {
       if (kDebugMode) {
-        print("Glove is offline, skipped active patient calibration sync.");
+        print("Glove is offline, skipped active patient calibration sync: $e");
       }
       return;
     }
@@ -74,7 +78,6 @@ class AppState extends ChangeNotifier {
       final forceMin = (cal['fo_min'] as num? ?? 4095).toInt();
       final forceMax = (cal['fo_max'] as num? ?? 0).toInt();
       
-      final api = GloveApiService();
       for (int i = 0; i < 5; i++) {
         if (i < flexMin.length && i < flexMax.length) {
           await api.calibrateFlex(
