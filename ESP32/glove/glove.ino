@@ -18,6 +18,7 @@ bool hapticEnabled = false;
 // Shared telemetry state variables
 SensorTelemetryData sharedTelemetry;
 SemaphoreHandle_t telemetryMutex;
+SemaphoreHandle_t registryMutex;
 
 // Global definitions (declared extern in headers)
 std::unordered_map<uint64_t, RegisteredBox> boxRegistry;
@@ -136,6 +137,7 @@ void setup() {
 
     // Create a mutex to protect shared telemetry data across cores
     telemetryMutex = xSemaphoreCreateMutex();
+    registryMutex = xSemaphoreCreateRecursiveMutex();
 
     // Spawn the background network task on Core 0
     xTaskCreatePinnedToCore(

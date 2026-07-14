@@ -199,6 +199,7 @@ inline void handleSave() {
 // Registry is included via glove_espnow.h
 
 inline void handleTelemetry() {
+    RegistryLock lock;
     SensorTelemetryData localData;
     if (xSemaphoreTake(telemetryMutex, portMAX_DELAY) == pdTRUE) {
         localData = sharedTelemetry;

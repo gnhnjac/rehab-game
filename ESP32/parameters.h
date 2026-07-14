@@ -83,6 +83,20 @@ struct RegisteredBox {
 
 // Box registry extern declaration (defined in glove.ino)
 extern std::unordered_map<uint64_t, RegisteredBox> boxRegistry;
+extern SemaphoreHandle_t registryMutex;
+
+struct RegistryLock {
+    RegistryLock() {
+        if (registryMutex) {
+            xSemaphoreTakeRecursive(registryMutex, portMAX_DELAY);
+        }
+    }
+    ~RegistryLock() {
+        if (registryMutex) {
+            xSemaphoreGiveRecursive(registryMutex);
+        }
+    }
+};
 
 // --- TELEMETRY SHARED DATA STRUCTURE ---
 typedef struct {

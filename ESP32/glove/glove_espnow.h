@@ -66,6 +66,8 @@ inline void OnDataRecv(const uint8_t * incoming_mac, const uint8_t *incomingData
     AppMessage msg;
     memcpy(&msg, incomingData, sizeof(AppMessage));
 
+    RegistryLock lock;
+
     uint64_t boxKey = macToKey(incoming_mac);
 
     if (msg.type == MSG_TYPE_REGISTER_MAIN) {
@@ -264,6 +266,7 @@ inline void OnDataRecv(const uint8_t * incoming_mac, const uint8_t *incomingData
 
 // Timeout check function
 inline void checkBoxTimeouts() {
+    RegistryLock lock;
     unsigned long now = millis();
     for (auto it = boxRegistry.begin(); it != boxRegistry.end(); ) {
         if (now - it->second.last_seen > 5000) {

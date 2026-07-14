@@ -241,6 +241,7 @@ inline void colorToRgb(const char* color, uint8_t &r, uint8_t &g, uint8_t &b) {
 
 // Select next game target for Cubes & Boxes
 inline void selectNextCubesBoxesTarget() {
+    RegistryLock lock;
     if (boxRegistry.empty()) {
         Serial.println("[Game] Warning: No connected boxes for target selection!");
         return;
