@@ -11,6 +11,9 @@ import 'telemetry_provider.dart';
 /// poller) so that changing the glove host in one place affects both.
 /// Endpoints are defined in ESP32/glove/glove_web_server.h.
 class GloveApiService {
+  // Shared persistent client to reuse TCP sockets and avoid network saturation
+  static final http.Client _httpClient = http.Client();
+
   /// Resolve the current glove host from the shared telemetry service so the
   /// user only configures it once (in the Config tab / connection panel).
   String get _host {
@@ -27,7 +30,7 @@ class GloveApiService {
   /// GET /api/raw-sensors -> {flexRaw:[...], forceRaw:int}
   Future<RawSensors> fetchRawSensors() async {
     final response =
-        await http.get(_uri('/api/raw-sensors')).timeout(const Duration(seconds: 2));
+        await _httpClient.get(_uri('/api/raw-sensors')).timeout(const Duration(seconds: 2));
     if (response.statusCode != 200) {
       throw GloveApiException('raw-sensors HTTP ${response.statusCode}');
     }
@@ -49,7 +52,7 @@ class GloveApiService {
     required int forceMin,
     required int forceMax,
   }) async {
-    final response = await http
+    final response = await _httpClient
         .post(_uri('/api/calibrate-sensor', {
           'sensorType': 'force',
           'forceMin': '$forceMin',
@@ -67,7 +70,7 @@ class GloveApiService {
     required int flexMin,
     required int flexMax,
   }) async {
-    final response = await http
+    final response = await _httpClient
         .post(_uri('/api/calibrate-sensor', {
           'sensorType': 'flex',
           'fingerIndex': '$fingerIndex',
@@ -82,7 +85,7 @@ class GloveApiService {
 
   /// GET/POST /api/command?cmd=...&time=...
   Future<void> sendCommand(String cmd, {int time = 0}) async {
-    final response = await http
+    final response = await _httpClient
         .post(_uri('/api/command', {'cmd': cmd, 'time': '$time'}))
         .timeout(const Duration(seconds: 2));
     if (response.statusCode != 200) {
@@ -116,7 +119,6 @@ class GloveApiService {
       query['forceMax'] = forceMax;
     }
 
-
     switch (prescription) {
       case CubesBoxesPrescription p:
         query['difficulty'] = '${p.difficulty}';
@@ -142,7 +144,7 @@ class GloveApiService {
       query['patientId'] = patientId;
     }
 
-    final response = await http
+    final response = await _httpClient
         .post(_uri('/api/active-prescription', query))
         .timeout(const Duration(seconds: 3));
     if (response.statusCode != 200) {
@@ -152,7 +154,7 @@ class GloveApiService {
 
   /// Sends a command to explicitly stop any running prescription game on the glove
   Future<void> stopActivePrescription() async {
-    final response = await http
+    final response = await _httpClient
         .post(_uri('/api/active-prescription', {'gameType': '0'}))
         .timeout(const Duration(seconds: 3));
     if (response.statusCode != 200) {
