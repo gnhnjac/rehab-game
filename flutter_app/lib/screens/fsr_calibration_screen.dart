@@ -29,65 +29,66 @@ class _FsrCalibrationScreenState extends State<FsrCalibrationScreen> {
   @override
   void initState() {
     super.initState();
-    _ensureConnected();
-    _startPolling();
-  }
-
-  Future<void> _ensureConnected() async {
-    final service = TelemetryProvider.getService();
-    if (!service.isConnected) {
-      try {
-        await service.connect();
-      } catch (_) {}
-    }
+    TelemetryProvider.getService().disconnect(); // Stop background polling
+    _online = true; // Assume online for initial capture
   }
 
   @override
   void dispose() {
-    _telemetrySub?.cancel();
+    TelemetryProvider.getService().connect(); // Restart background polling
     super.dispose();
   }
 
-  void _startPolling() {
-    final telemetryService = TelemetryProvider.getService();
-    _online = telemetryService.isConnected;
-    
-    _telemetrySub = telemetryService.telemetryStream.listen((telemetry) {
-      if (!mounted) return;
+  Future<void> _captureRest() async {
+    setState(() => _saving = true);
+    try {
+      final raw = await _api.fetchRawSensors();
       setState(() {
-        if (telemetry.force.raw.isNotEmpty) {
-          _liveRaw = telemetry.force.raw.first;
-        }
-        _online = telemetryService.isConnected;
+        _capturedMin = raw.forceRaw;
+        _liveRaw = raw.forceRaw;
+        _online = true;
       });
-    });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Captured unpressed rest baseline (Raw: ${raw.forceRaw})'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      setState(() => _online = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error capturing rest value: $e'), backgroundColor: Colors.redAccent),
+      );
+    } finally {
+      setState(() => _saving = false);
+    }
   }
 
-  void _captureRest() {
-    if (!_online) return;
-    setState(() {
-      _capturedMin = _liveRaw;
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Captured unpressed rest baseline (Raw: $_liveRaw)'),
-        backgroundColor: Colors.green,
-      ),
-    );
+  Future<void> _captureSqueeze() async {
+    setState(() => _saving = true);
+    try {
+      final raw = await _api.fetchRawSensors();
+      setState(() {
+        _capturedMax = raw.forceRaw;
+        _liveRaw = raw.forceRaw;
+        _online = true;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Captured maximum squeeze baseline (Raw: ${raw.forceRaw})'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      setState(() => _online = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error capturing squeeze value: $e'), backgroundColor: Colors.redAccent),
+      );
+    } finally {
+      setState(() => _saving = false);
+    }
   }
 
-  void _captureSqueeze() {
-    if (!_online) return;
-    setState(() {
-      _capturedMax = _liveRaw;
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Captured maximum squeeze baseline (Raw: $_liveRaw)'),
-        backgroundColor: Colors.green,
-      ),
-    );
-  }
 
   Future<void> _saveCalibration() async {
     if (_capturedMin == null || _capturedMax == null) return;

@@ -38,64 +38,64 @@ class _FlexCalibrationScreenState extends State<FlexCalibrationScreen> {
   @override
   void initState() {
     super.initState();
-    _ensureConnected();
-    _startPolling();
-  }
-
-  Future<void> _ensureConnected() async {
-    final service = TelemetryProvider.getService();
-    if (!service.isConnected) {
-      try {
-        await service.connect();
-      } catch (_) {}
-    }
+    TelemetryProvider.getService().disconnect(); // Stop background polling
+    _online = true; // Assume online for initial capture
   }
 
   @override
   void dispose() {
-    _telemetrySub?.cancel();
+    TelemetryProvider.getService().connect(); // Restart background polling
     super.dispose();
   }
 
-  void _startPolling() {
-    final telemetryService = TelemetryProvider.getService();
-    _online = telemetryService.isConnected;
-    
-    _telemetrySub = telemetryService.telemetryStream.listen((telemetry) {
-      if (!mounted) return;
+  Future<void> _captureOpen() async {
+    setState(() => _saving = true);
+    try {
+      final raw = await _api.fetchRawSensors();
       setState(() {
-        if (telemetry.flex.raw.length >= 5) {
-          _liveRaw = telemetry.flex.raw;
-        }
-        _online = telemetryService.isConnected;
+        _capturedMin = List<int>.from(raw.flexRaw);
+        _liveRaw = List<int>.from(raw.flexRaw);
+        _online = true;
       });
-    });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Captured open hand baseline (Min limits)'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      setState(() => _online = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error capturing open hand values: $e'), backgroundColor: Colors.redAccent),
+      );
+    } finally {
+      setState(() => _saving = false);
+    }
   }
 
-  void _captureOpen() {
-    if (!_online) return;
-    setState(() {
-      _capturedMin = List<int>.from(_liveRaw);
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Captured open hand baseline (Min limits)'),
-        backgroundColor: Colors.green,
-      ),
-    );
-  }
-
-  void _captureClosed() {
-    if (!_online) return;
-    setState(() {
-      _capturedMax = List<int>.from(_liveRaw);
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Captured closed hand baseline (Max limits)'),
-        backgroundColor: Colors.green,
-      ),
-    );
+  Future<void> _captureClosed() async {
+    setState(() => _saving = true);
+    try {
+      final raw = await _api.fetchRawSensors();
+      setState(() {
+        _capturedMax = List<int>.from(raw.flexRaw);
+        _liveRaw = List<int>.from(raw.flexRaw);
+        _online = true;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Captured closed hand baseline (Max limits)'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      setState(() => _online = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error capturing closed hand values: $e'), backgroundColor: Colors.redAccent),
+      );
+    } finally {
+      setState(() => _saving = false);
+    }
   }
 
   Future<void> _saveCalibration() async {
