@@ -1,8 +1,5 @@
 import os
 import sys
-import wave
-import math
-import struct
 
 # Auto-install gTTS if not present
 try:
@@ -10,28 +7,12 @@ try:
 except ImportError:
     print("[TTS] gTTS library not found. Installing via pip...")
     import subprocess
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "gTTS"])
+    try:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "gTTS"])
+    except Exception:
+        print("[TTS] sys.executable pip failed. Trying system-wide pip...")
+        subprocess.check_call(["pip", "install", "gTTS"])
     from gtts import gTTS
-
-def generate_beep_wav(filepath, duration_ms, frequency, volume=0.5):
-    """Generates a pure sine wave beep in WAV format."""
-    sample_rate = 44100
-    num_samples = int(sample_rate * (duration_ms / 1000.0))
-    
-    os.makedirs(os.path.dirname(filepath), exist_ok=True)
-    with wave.open(filepath, 'wb') as wav_file:
-        wav_file.setnchannels(1)  # Mono
-        wav_file.setsampwidth(2) # 16-bit
-        wav_file.setframerate(sample_rate)
-        
-        for i in range(num_samples):
-            # Sine wave formula
-            t = float(i) / sample_rate
-            value = int(32767.0 * volume * math.sin(2.0 * math.pi * frequency * t))
-            data = struct.pack('<h', value)
-            wav_file.writeframes(data)
-            
-    print(f"Generated Alert Beep: {filepath} ({frequency}Hz, {duration_ms}ms)")
 
 def generate_hebrew_tts(filepath, text):
     """Synthesizes Hebrew text to an MP3 file using Google Text-to-Speech (gTTS)."""
@@ -42,12 +23,13 @@ def generate_hebrew_tts(filepath, text):
     tts.save(filepath)
     print(f"Generated Hebrew Voice Prompt: {filepath}")
 
-
 def main():
-    output_dir = r"c:\Users\gnhnj\Programming\rehab-game\Documentation\audio_assets"
+    # Resolve output directory relative to script path
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    output_dir = os.path.abspath(os.path.join(script_dir, "..", "audio_assets"))
+    
     print(f"Starting audio assets generation in: {output_dir}\n")
 
-    # Define the SD card folder structure and prompts
     # Folder 01: Cubes & Boxes
     folder_01 = {
         "001.mp3": "מתחילים בתרגיל קוביות וקופסאות.",
@@ -73,8 +55,11 @@ def main():
         "002.mp3": "כופף את האצבע והחזק אותה מכופפת."
     }
 
-    # Folder 04: General/Feedback prompts and alarms
-    folder_04_verbal = {
+    # Folder 04: General/Feedback prompts and alarms (Only MP3, no WAVs)
+    folder_04 = {
+        "001.mp3": "הצלחה!",
+        "002.mp3": "שגיאה!",
+        "003.mp3": "טיק.",
         "004.mp3": "כל הכבוד, סיימת את התרגיל בהצלחה!",
         "005.mp3": "תם הזמן!",
         "006.mp3": "לחץ חזק יותר.",
@@ -97,19 +82,10 @@ def main():
         path = os.path.join(output_dir, "03", filename)
         generate_hebrew_tts(path, text)
 
-    # Generate Folder 04 prompts (verbal)
-    for filename, text in folder_04_verbal.items():
+    # Generate Folder 04 prompts
+    for filename, text in folder_04.items():
         path = os.path.join(output_dir, "04", filename)
         generate_hebrew_tts(path, text)
-
-    # Generate Folder 04 Alert Beeps (WAV format)
-    # 001.wav -> Success chime (Dual-frequency pleasant chord)
-    # DFPlayer Mini supports both MP3 and WAV, so we save alerts as WAV
-    generate_beep_wav(os.path.join(output_dir, "04", "001.wav"), duration_ms=400, frequency=1200, volume=0.4)
-    # 002.wav -> Error alarm (Low frequency buzzer beep)
-    generate_beep_wav(os.path.join(output_dir, "04", "002.wav"), duration_ms=300, frequency=220, volume=0.6)
-    # 003.wav -> Countdown/Tick sound (Short high-pitch tick)
-    generate_beep_wav(os.path.join(output_dir, "04", "003.wav"), duration_ms=50, frequency=1000, volume=0.3)
 
     print("\n" + "=" * 60)
     print(" AUDIO ASSETS GENERATION COMPLETE")
