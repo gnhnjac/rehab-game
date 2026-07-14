@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../models/game_prescription.dart';
 import '../models/glove_telemetry.dart';
+import '../state/app_state_scope.dart';
 import '../services/cube_registry.dart';
 import '../services/glove_api_service.dart';
 import '../services/telemetry_provider.dart';
