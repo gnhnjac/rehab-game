@@ -39,6 +39,8 @@ volatile int queueTail = 0;
 int flexMin[NUM_FINGERS];
 int flexMax[NUM_FINGERS];
 float flexSmoothed[NUM_FINGERS];
+int forceMin = 4095;
+int forceMax = 0;
 float forceSmoothed = 0;
 bool isCalibrated = false;
 

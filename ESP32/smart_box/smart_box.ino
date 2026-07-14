@@ -320,7 +320,6 @@ void setup(void) {
   uint32_t versiondata = nfc.getFirmwareVersion();
   if (!versiondata) {
     Serial.println("WARNING: Didn't find PN532 board. Check your wiring!");
-    Serial.println("Running in Wi-Fi simulation mode (sending mock events)...");
     nfcFound = false;
   } else {
     nfcFound = true;
@@ -390,32 +389,6 @@ void loop(void) {
         Serial.println("Card Left!");
         sendNfcEvent(EVENT_CUBE_LEFT, uid, uidLength);
       }
-    }
-  } else {
-    // SIMULATED MODE: Send simulated events every 10 seconds, checking heartbeats
-    uint8_t simulatedUid[] = { 0x04, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66 };
-    uint8_t uidLen = 7;
-    
-    Serial.println("[Simulated] Cube Entered!");
-    sendNfcEvent(EVENT_CUBE_ENTERED, simulatedUid, uidLen);
-    
-    unsigned long startWait = millis();
-    while (millis() - startWait < 5000 && isRegistered) {
-      updateLeds();
-      checkHeartbeats();
-      delay(50);
-    }
-
-    if (isRegistered) {
-      Serial.println("[Simulated] Cube Left!");
-      sendNfcEvent(EVENT_CUBE_LEFT, simulatedUid, uidLen);
-    }
-
-    startWait = millis();
-    while (millis() - startWait < 5000 && isRegistered) {
-      updateLeds();
-      checkHeartbeats();
-      delay(50);
     }
   }
 }
