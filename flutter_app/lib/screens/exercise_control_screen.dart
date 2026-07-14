@@ -299,7 +299,7 @@ class _ExerciseControlScreenState extends State<ExerciseControlScreen> {
               ),
               _buildStat(
                 'Force',
-                t != null && t.force.percent.isNotEmpty ? '${t.force.percent.first}%' : '—',
+                t != null && t.force.percent.isNotEmpty ? '${t.force.percent.first}g' : '—',
                 color,
               ),
             ],

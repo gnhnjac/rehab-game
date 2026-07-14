@@ -163,7 +163,7 @@ inline void runSensorCalibration(int seconds) {
     for (int i = 0; i < NUM_FINGERS; i++) {
         Serial.printf("  Finger %d: %d -> %d\n", i + 1, flexMin[i], flexMax[i]);
     }
-    Serial.printf("  Force FSR: %d -> %d\n", forceMin, forceMax);
+    Serial.printf("  Force FSR: %d -> %d (%.0fg -> %.0fg)\n", forceMin, forceMax, getFsrForceGrams(forceMax), getFsrForceGrams(forceMin));
     Serial.println("=================================\n");
 }
 
@@ -178,8 +178,7 @@ inline void readMappedSensors(int* flexPercent, int& forcePercent) {
 
     int rawForce = analogRead(FORCE_PIN);
     forceSmoothed = (rawForce * filterWeight) + (forceSmoothed * (1.0 - filterWeight));
-    forcePercent = map((int)forceSmoothed, forceMin, forceMax, 0, 100);
-    forcePercent = constrain(forcePercent, 0, 100);
+    forcePercent = (int)getFsrForceGrams((int)forceSmoothed);
 }
 
 inline void readAllSensors(int* flexRaw, int* flexPercent, int& forceRaw, int& forcePercent) {
@@ -195,8 +194,7 @@ inline void readAllSensors(int* flexRaw, int* flexPercent, int& forceRaw, int& f
     int rawForce = analogRead(FORCE_PIN);
     forceSmoothed = (rawForce * filterWeight) + (forceSmoothed * (1.0 - filterWeight));
     forceRaw = (int)forceSmoothed;
-    forcePercent = map(forceRaw, forceMin, forceMax, 0, 100);
-    forcePercent = constrain(forcePercent, 0, 100);
+    forcePercent = (int)getFsrForceGrams(forceRaw);
 }
 
 #endif
