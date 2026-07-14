@@ -26,22 +26,26 @@ sealed class GamePrescription {
 final class CubesBoxesPrescription extends GamePrescription {
   final int timerSeconds;
   final double targetWeightGrams;
+  final int difficulty;
 
   const CubesBoxesPrescription({
     required super.cycles,
     required this.timerSeconds,
     required this.targetWeightGrams,
+    this.difficulty = 2,
   }) : super(type: GameType.cubesBoxes);
 
   CubesBoxesPrescription copyWith({
     int? cycles,
     int? timerSeconds,
     double? targetWeightGrams,
+    int? difficulty,
   }) {
     return CubesBoxesPrescription(
       cycles: cycles ?? this.cycles,
       timerSeconds: timerSeconds ?? this.timerSeconds,
       targetWeightGrams: targetWeightGrams ?? this.targetWeightGrams,
+      difficulty: difficulty ?? this.difficulty,
     );
   }
 
@@ -50,6 +54,7 @@ final class CubesBoxesPrescription extends GamePrescription {
       cycles: json['cycles'] as int,
       timerSeconds: json['timerSeconds'] as int,
       targetWeightGrams: (json['targetWeightGrams'] as num).toDouble(),
+      difficulty: json['difficulty'] as int? ?? 2,
     );
   }
 
@@ -59,6 +64,7 @@ final class CubesBoxesPrescription extends GamePrescription {
         'cycles': cycles,
         'timerSeconds': timerSeconds,
         'targetWeightGrams': targetWeightGrams,
+        'difficulty': difficulty,
       };
 }
 

@@ -25,12 +25,18 @@ class _PrescriptionEditScreenState extends State<PrescriptionEditScreen> {
   late final TextEditingController _cyclesController;
   late final TextEditingController _timerOrHoldController;
   late final TextEditingController _targetController;
+  late int _selectedDifficulty;
 
   @override
   void initState() {
     super.initState();
     final p = widget.prescription;
     _cyclesController = TextEditingController(text: p.cycles.toString());
+    if (p is CubesBoxesPrescription) {
+      _selectedDifficulty = p.difficulty;
+    } else {
+      _selectedDifficulty = 2;
+    }
     switch (p) {
       case CubesBoxesPrescription cb:
         _timerOrHoldController = TextEditingController(text: cb.timerSeconds.toString());
@@ -92,6 +98,7 @@ class _PrescriptionEditScreenState extends State<PrescriptionEditScreen> {
           cycles: cycles,
           timerSeconds: int.parse(_timerOrHoldController.text.trim()),
           targetWeightGrams: double.parse(_targetController.text.trim()),
+          difficulty: _selectedDifficulty,
         );
       case PinchPrescription pinch:
         updated = pinch.copyWith(
@@ -201,6 +208,26 @@ class _PrescriptionEditScreenState extends State<PrescriptionEditScreen> {
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               validator: targetValidator,
             ),
+            if (p is CubesBoxesPrescription) ...[
+              const SizedBox(height: 16),
+              DropdownButtonFormField<int>(
+                value: _selectedDifficulty,
+                decoration: const InputDecoration(
+                  labelText: 'Game Difficulty Level',
+                  border: OutlineInputBorder(),
+                ),
+                items: const [
+                  DropdownMenuItem(value: 1, child: Text('Level 1: Fixed Target Box Color')),
+                  DropdownMenuItem(value: 2, child: Text('Level 2: Varying Color & Target Weight')),
+                  DropdownMenuItem(value: 3, child: Text('Level 3: Shape & Color Match')),
+                ],
+                onChanged: (val) {
+                  if (val != null) {
+                    setState(() => _selectedDifficulty = val);
+                  }
+                },
+              ),
+            ],
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: _submit,

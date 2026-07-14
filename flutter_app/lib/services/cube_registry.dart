@@ -6,18 +6,24 @@ import 'package:shared_preferences/shared_preferences.dart';
 class EnrolledCube {
   final String uid;
   final String name;
-  final String colorHex; // Hex color representation or simple name
+  final String colorHex;
+  final String shape;
+  final int weightGrams;
 
   EnrolledCube({
     required this.uid,
     required this.name,
     required this.colorHex,
+    required this.shape,
+    required this.weightGrams,
   });
 
   Map<String, dynamic> toJson() => {
         'uid': uid,
         'name': name,
         'colorHex': colorHex,
+        'shape': shape,
+        'weightGrams': weightGrams,
       };
 
   factory EnrolledCube.fromJson(Map<String, dynamic> json) {
@@ -25,6 +31,8 @@ class EnrolledCube {
       uid: json['uid'] as String,
       name: json['name'] as String,
       colorHex: json['colorHex'] as String,
+      shape: json['shape'] as String? ?? 'circle',
+      weightGrams: (json['weightGrams'] as num? ?? 100).toInt(),
     );
   }
 }
@@ -62,6 +70,8 @@ class CubeRegistry {
             uid: doc.id,
             name: doc.data()['name'] ?? '',
             colorHex: doc.data()['color'] ?? doc.data()['colorHex'] ?? 'Red',
+            shape: doc.data()['shape'] ?? 'circle',
+            weightGrams: (doc.data()['weightGrams'] as num? ?? 100).toInt(),
           )
       };
       save(); // Update local SharedPreferences cache
@@ -82,8 +92,14 @@ class CubeRegistry {
     }
   }
 
-  static Future<void> enrollCube(String uid, String name, String colorHex) async {
-    _registry[uid] = EnrolledCube(uid: uid, name: name, colorHex: colorHex);
+  static Future<void> enrollCube(String uid, String name, String colorHex, String shape, int weightGrams) async {
+    _registry[uid] = EnrolledCube(
+      uid: uid,
+      name: name,
+      colorHex: colorHex,
+      shape: shape,
+      weightGrams: weightGrams,
+    );
     await save();
 
     // Write to Cloud Firestore
@@ -91,8 +107,8 @@ class CubeRegistry {
       await FirebaseFirestore.instance.collection('cubes').doc(uid).set({
         'name': name,
         'color': colorHex,
-        'shape': 'circle', // default shape mapping
-        'weightGrams': 100, // default weight mapping
+        'shape': shape,
+        'weightGrams': weightGrams,
       });
     } catch (e) {
       // ignore: avoid_print

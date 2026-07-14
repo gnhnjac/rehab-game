@@ -44,21 +44,17 @@ class GloveApiService {
     );
   }
 
-  /// POST /api/calibrate-sensor?sensorType=force&coefficients=r0,r1,r2,g0,g1,g2
-  ///
-  /// The three (raw, grams) points define a piecewise interpolation curve the
-  /// firmware uses to map raw ADC readings to grams.
-  Future<void> calibrateForce(List<CalibrationPoint> points) async {
-    if (points.length != 3) {
-      throw GloveApiException('Force calibration requires exactly 3 points');
-    }
-    final sorted = [...points]..sort((a, b) => a.raw.compareTo(b.raw));
-    final coeffs = [
-      sorted[0].raw, sorted[1].raw, sorted[2].raw,
-      sorted[0].grams.round(), sorted[1].grams.round(), sorted[2].grams.round(),
-    ].join(',');
+  /// POST /api/calibrate-sensor?sensorType=force&forceMin=X&forceMax=Y
+  Future<void> calibrateForce({
+    required int forceMin,
+    required int forceMax,
+  }) async {
     final response = await http
-        .post(_uri('/api/calibrate-sensor', {'sensorType': 'force', 'coefficients': coeffs}))
+        .post(_uri('/api/calibrate-sensor', {
+          'sensorType': 'force',
+          'forceMin': '$forceMin',
+          'forceMax': '$forceMax',
+        }))
         .timeout(const Duration(seconds: 3));
     if (response.statusCode != 200) {
       throw GloveApiException('calibrate force failed: HTTP ${response.statusCode} ${response.body}');
@@ -105,7 +101,7 @@ class GloveApiService {
     final query = <String, String>{
       'gameType': '${prescription.type.index + 1}',
       'cycles': '${prescription.cycles}',
-      'difficulty': '2',
+      'difficulty': prescription is CubesBoxesPrescription ? '${prescription.difficulty}' : '2',
     };
 
 

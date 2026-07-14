@@ -22,9 +22,12 @@ class _CubeCalibrationScreenState extends State<CubeCalibrationScreen> {
   String? _detectedUid;
   
   final _nameController = TextEditingController();
+  final _weightController = TextEditingController(text: '100');
   String _selectedColor = "Red";
+  String _selectedShape = "circle";
 
   final List<String> _colors = ["Red", "Green", "Blue", "Yellow", "Purple", "Cyan", "White"];
+  final List<String> _shapes = ["circle", "square", "triangle", "star", "hexagon"];
 
   @override
   void initState() {
@@ -37,6 +40,7 @@ class _CubeCalibrationScreenState extends State<CubeCalibrationScreen> {
   void dispose() {
     _sub?.cancel();
     _nameController.dispose();
+    _weightController.dispose();
     super.dispose();
   }
 
@@ -44,7 +48,6 @@ class _CubeCalibrationScreenState extends State<CubeCalibrationScreen> {
     final service = TelemetryProvider.getService();
     _service = service;
     _sub = service.telemetryStream.listen((t) {
-      // Find the first non-empty cube UID in any registered box
       String? foundUid;
       for (final box in t.boxes) {
         final cubeUid = box['cube'] as String?;
@@ -58,13 +61,16 @@ class _CubeCalibrationScreenState extends State<CubeCalibrationScreen> {
         setState(() {
           _detectedUid = foundUid;
           if (foundUid != null) {
-            // Suggest a default name if not enrolled
             final enrolled = CubeRegistry.getCube(foundUid);
             if (enrolled != null) {
               _nameController.text = enrolled.name;
               _selectedColor = enrolled.colorHex;
+              _selectedShape = enrolled.shape;
+              _weightController.text = enrolled.weightGrams.toString();
             } else {
               _nameController.text = "Cube #${foundUid.substring(0, 4)}";
+              _selectedShape = "circle";
+              _weightController.text = "100";
             }
           }
         });
@@ -88,7 +94,9 @@ class _CubeCalibrationScreenState extends State<CubeCalibrationScreen> {
       return;
     }
 
-    await CubeRegistry.enrollCube(_detectedUid!, name, _selectedColor);
+    final weightVal = int.tryParse(_weightController.text.trim()) ?? 100;
+
+    await CubeRegistry.enrollCube(_detectedUid!, name, _selectedColor, _selectedShape, weightVal);
     if (!mounted) return;
     
     setState(() {});
@@ -120,6 +128,17 @@ class _CubeCalibrationScreenState extends State<CubeCalibrationScreen> {
       case "Cyan": return Colors.cyan;
       case "White": return Colors.white;
       default: return Colors.grey;
+    }
+  }
+
+  IconData _getIconFromShape(String shape) {
+    switch (shape) {
+      case "circle": return Icons.circle_outlined;
+      case "square": return Icons.crop_square;
+      case "triangle": return Icons.change_history;
+      case "star": return Icons.star_border;
+      case "hexagon": return Icons.hexagon_outlined;
+      default: return Icons.help_outline;
     }
   }
 
@@ -231,37 +250,80 @@ class _CubeCalibrationScreenState extends State<CubeCalibrationScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    DropdownButtonFormField<String>(
-                      value: _selectedColor,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            value: _selectedColor,
+                            decoration: const InputDecoration(
+                              labelText: 'Cube Color',
+                              border: OutlineInputBorder(),
+                            ),
+                            items: _colors.map((c) {
+                              return DropdownMenuItem<String>(
+                                value: c,
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 12,
+                                      height: 12,
+                                      decoration: BoxDecoration(
+                                        color: _getColorFromLabel(c),
+                                        shape: BoxShape.circle,
+                                        border: Border.all(color: Colors.grey.shade600),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(c, style: const TextStyle(fontSize: 13)),
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                            onChanged: (val) {
+                              if (val != null) {
+                                setState(() => _selectedColor = val);
+                              }
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            value: _selectedShape,
+                            decoration: const InputDecoration(
+                              labelText: 'Cube Shape',
+                              border: OutlineInputBorder(),
+                            ),
+                            items: _shapes.map((s) {
+                              return DropdownMenuItem<String>(
+                                value: s,
+                                child: Row(
+                                  children: [
+                                    Icon(_getIconFromShape(s), size: 16),
+                                    const SizedBox(width: 8),
+                                    Text(s, style: const TextStyle(fontSize: 13)),
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                            onChanged: (val) {
+                              if (val != null) {
+                                setState(() => _selectedShape = val);
+                              }
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: _weightController,
+                      keyboardType: TextInputType.number,
                       decoration: const InputDecoration(
-                        labelText: 'Cube Color Indicator',
+                        labelText: 'Weight (Grams)',
+                        hintText: 'e.g. 100 or 500',
                         border: OutlineInputBorder(),
                       ),
-                      items: _colors.map((c) {
-                        return DropdownMenuItem<String>(
-                          value: c,
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 14,
-                                height: 14,
-                                decoration: BoxDecoration(
-                                  color: _getColorFromLabel(c),
-                                  shape: BoxShape.circle,
-                                  border: Border.all(color: Colors.grey.shade600),
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Text(c),
-                            ],
-                          ),
-                        );
-                      }).toList(),
-                      onChanged: (val) {
-                        if (val != null) {
-                          setState(() => _selectedColor = val);
-                        }
-                      },
                     ),
                     const SizedBox(height: 20),
                     SizedBox(
@@ -303,6 +365,7 @@ class _CubeCalibrationScreenState extends State<CubeCalibrationScreen> {
                 itemBuilder: (context, index) {
                   final cube = cubes[index];
                   final dotColor = _getColorFromLabel(cube.colorHex);
+                  final shapeIcon = _getIconFromShape(cube.shape);
                   return Card(
                     margin: const EdgeInsets.only(bottom: 8),
                     child: ListTile(
@@ -312,11 +375,11 @@ class _CubeCalibrationScreenState extends State<CubeCalibrationScreen> {
                           color: dotColor.withOpacity(0.15),
                           shape: BoxShape.circle,
                         ),
-                        child: Icon(Icons.nfc_rounded, color: dotColor, size: 20),
+                        child: Icon(shapeIcon, color: dotColor, size: 20),
                       ),
                       title: Text(cube.name, style: const TextStyle(fontWeight: FontWeight.bold)),
                       subtitle: Text(
-                        'UID: ${cube.uid} · Color: ${cube.colorHex}',
+                        'UID: ${cube.uid} · Color: ${cube.colorHex} · Shape: ${cube.shape} · Weight: ${cube.weightGrams}g',
                         style: const TextStyle(fontSize: 11, color: Colors.grey),
                       ),
                       trailing: IconButton(

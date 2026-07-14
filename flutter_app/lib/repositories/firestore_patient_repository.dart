@@ -16,16 +16,17 @@ class FirestorePatientRepository implements PatientRepository {
     // 1. Cubes & Boxes
     final cb = rxData['cubesBoxes'] as Map<String, dynamic>? ?? {};
     prescriptionsMap[GameType.cubesBoxes] = CubesBoxesPrescription(
-      cycles: cb['cycles'] as int? ?? 3,
-      timerSeconds: cb['timer'] as int? ?? 60,
+      cycles: (cb['cycles'] as num? ?? 3).toInt(),
+      timerSeconds: (cb['timer'] as num? ?? 60).toInt(),
       targetWeightGrams: (cb['targetWeightGrams'] as num? ?? 200.0).toDouble(),
+      difficulty: (cb['difficulty'] as num? ?? 2).toInt(),
     );
 
     // 2. Pinch
     final pinch = rxData['pinch'] as Map<String, dynamic>? ?? {};
     prescriptionsMap[GameType.pinch] = PinchPrescription(
-      cycles: pinch['cycles'] as int? ?? 10,
-      holdDurationSeconds: pinch['requiredHoldTimeSeconds'] as int? ?? 5,
+      cycles: (pinch['cycles'] as num? ?? 10).toInt(),
+      holdDurationSeconds: (pinch['requiredHoldTimeSeconds'] as num? ?? 5).toInt(),
       targetForceGrams: (pinch['targetWeightGrams'] as num? ?? 500.0).toDouble(),
     );
 
@@ -34,18 +35,21 @@ class FirestorePatientRepository implements PatientRepository {
     final romList = bend['requiredRom'] as List?;
     final romVal = romList != null && romList.isNotEmpty ? romList.first : 70.0;
     prescriptionsMap[GameType.bend] = BendPrescription(
-      cycles: bend['cycles'] as int? ?? 10,
-      holdDurationSeconds: bend['allowedTimeSeconds'] as int? ?? 5,
-      targetRomPercent: (romVal as num).toDouble(),
+      cycles: (bend['cycles'] as num? ?? 10).toInt(),
+      holdDurationSeconds: (bend['allowedTimeSeconds'] as num? ?? 5).toInt(),
+      targetRomPercent: (romVal as num? ?? 70.0).toDouble(),
     );
 
     // Parse calibration
-    final calibration = data['calibration'] as Map<String, dynamic>? ?? {
-      'flex_min': [0, 0, 0, 0, 0],
-      'flex_max': [4095, 4095, 4095, 4095, 4095],
-      'fsr_coef_a': 0.0,
-      'fsr_coef_b': 0.0,
-      'fsr_coef_c': 0.0,
+    final calibration = data['calibration'] as Map<String, dynamic>? ?? {};
+    final parsedCalibration = {
+      'flex_min': (calibration['flex_min'] as List?)?.map((e) => (e as num).toInt()).toList() ?? [0, 0, 0, 0, 0],
+      'flex_max': (calibration['flex_max'] as List?)?.map((e) => (e as num).toInt()).toList() ?? [4095, 4095, 4095, 4095, 4095],
+      'fsr_coef_a': (calibration['fsr_coef_a'] as num? ?? 0.0).toDouble(),
+      'fsr_coef_b': (calibration['fsr_coef_b'] as num? ?? 0.0).toDouble(),
+      'fsr_coef_c': (calibration['fsr_coef_c'] as num? ?? 0.0).toDouble(),
+      'fo_min': (calibration['fo_min'] as num? ?? 4095).toInt(),
+      'fo_max': (calibration['fo_max'] as num? ?? 0).toInt(),
     };
 
     return Patient(
@@ -54,7 +58,7 @@ class FirestorePatientRepository implements PatientRepository {
       age: data['age'] as int?,
       notes: data['notes'] as String?,
       prescriptions: prescriptionsMap,
-      calibration: calibration,
+      calibration: parsedCalibration,
     );
   }
 
@@ -129,6 +133,7 @@ class FirestorePatientRepository implements PatientRepository {
         'cycles': prescription.cycles,
         'timer': prescription.timerSeconds,
         'targetWeightGrams': prescription.targetWeightGrams,
+        'difficulty': prescription.difficulty,
       };
     } else if (prescription is PinchPrescription) {
       updateMap['prescription.pinch'] = {

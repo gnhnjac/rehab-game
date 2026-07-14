@@ -39,15 +39,26 @@ inline void setupSensors() {
 
     // Load from NVS Preferences
     preferences.begin("calib", true); // Read-only mode
-    isCalibrated = preferences.getBool("isCalibrated", false);
+    isCalibrated = preferences.getBool("is_cal", false);
     if (isCalibrated) {
-        preferences.getBytes("flexMin", flexMin, sizeof(flexMin));
-        preferences.getBytes("flexMax", flexMax, sizeof(flexMax));
-        forceMin = preferences.getInt("forceMin", 4095);
-        forceMax = preferences.getInt("forceMax", 0);
+        for (int i = 0; i < NUM_FINGERS; i++) {
+            char keyMin[16], keyMax[16];
+            sprintf(keyMin, "fl_min_%d", i);
+            sprintf(keyMax, "fl_max_%d", i);
+            flexMin[i] = preferences.getInt(keyMin, 0);
+            flexMax[i] = preferences.getInt(keyMax, 4095);
+        }
+        forceMin = preferences.getInt("fo_min", 4095);
+        forceMax = preferences.getInt("fo_max", 0);
         Serial.println("[Sensors] Calibration parameters loaded from NVS successfully.");
     } else {
-        Serial.println("[Sensors] No valid calibration found in NVS. Awaiting manual/API calibration.");
+        Serial.println("[Sensors] No valid calibration found in NVS. Using default bounds.");
+        for (int i = 0; i < NUM_FINGERS; i++) {
+            flexMin[i] = 0;
+            flexMax[i] = 4095;
+        }
+        forceMin = 4095;
+        forceMax = 0;
     }
     preferences.end();
 
@@ -127,7 +138,7 @@ inline void runSensorCalibration(int seconds) {
     isCalibrated = true;
 
     // Save permanently to Preferences
-    preferences.begin("calibration", false);
+    preferences.begin("calib", false);
     for (int i = 0; i < NUM_FINGERS; i++) {
         char keyMin[16], keyMax[16];
         sprintf(keyMin, "fl_min_%d", i);
@@ -135,9 +146,9 @@ inline void runSensorCalibration(int seconds) {
         preferences.putInt(keyMin, flexMin[i]);
         preferences.putInt(keyMax, flexMax[i]);
     }
-    preferences.putInt("fsr_r0", forceMin);
-    preferences.putInt("fsr_r2", forceMax);
-    preferences.putBool("is_calibrated", isCalibrated);
+    preferences.putInt("fo_min", forceMin);
+    preferences.putInt("fo_max", forceMax);
+    preferences.putBool("is_cal", isCalibrated);
     preferences.end();
     
     // Safely write finished calibration state

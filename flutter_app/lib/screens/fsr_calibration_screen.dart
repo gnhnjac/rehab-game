@@ -3,14 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../services/glove_api_service.dart';
+import '../state/app_state_scope.dart';
+import '../repositories/patient_repository_provider.dart';
 
-/// Task I.4 — Calibrate the glove FSR (force sensor) against a digital scale.
-///
-/// The therapist places known weights on the sensor, reads the grams off a
-/// digital scale, and captures the corresponding raw ADC value at three points.
-/// The three (raw, grams) pairs are sent to the glove, which interpolates
-/// between them to convert future raw readings into grams. Works fully offline
-/// via direct local polling of the glove's REST API.
 class FsrCalibrationScreen extends StatefulWidget {
   const FsrCalibrationScreen({super.key});
 
@@ -18,29 +13,17 @@ class FsrCalibrationScreen extends StatefulWidget {
   State<FsrCalibrationScreen> createState() => _FsrCalibrationScreenState();
 }
 
-class _CapturePoint {
-  final String label;
-  final String hint;
-  final TextEditingController gramsController = TextEditingController();
-  int? capturedRaw;
-
-  _CapturePoint(this.label, this.hint);
-}
-
 class _FsrCalibrationScreenState extends State<FsrCalibrationScreen> {
-  static const Color _accent = Color(0xFF10B981);
+  static const Color _accent = Color(0xFF8B5CF6); // Purple
 
   final GloveApiService _api = GloveApiService();
   Timer? _pollTimer;
-  int? _liveRaw;
+  int _liveRaw = 4095;
   bool _online = false;
   bool _saving = false;
 
-  final List<_CapturePoint> _points = [
-    _CapturePoint('Point 1 — no load', 'Grams on scale (e.g. 0)'),
-    _CapturePoint('Point 2 — light weight', 'Grams on scale (e.g. 200)'),
-    _CapturePoint('Point 3 — heavy weight', 'Grams on scale (e.g. 500)'),
-  ];
+  int? _capturedMin; // Rest baseline
+  int? _capturedMax; // Squeeze baseline
 
   @override
   void initState() {
@@ -51,14 +34,11 @@ class _FsrCalibrationScreenState extends State<FsrCalibrationScreen> {
   @override
   void dispose() {
     _pollTimer?.cancel();
-    for (final p in _points) {
-      p.gramsController.dispose();
-    }
     super.dispose();
   }
 
   void _startPolling() {
-    _pollTimer = Timer.periodic(const Duration(milliseconds: 300), (_) async {
+    _pollTimer = Timer.periodic(const Duration(milliseconds: 250), (_) async {
       try {
         final raw = await _api.fetchRawSensors();
         if (!mounted) return;
@@ -73,247 +53,294 @@ class _FsrCalibrationScreenState extends State<FsrCalibrationScreen> {
     });
   }
 
-  void _capture(_CapturePoint point) {
-    if (_liveRaw == null) return;
-    setState(() => point.capturedRaw = _liveRaw);
+  void _captureRest() {
+    if (!_online) return;
+    setState(() {
+      _capturedMin = _liveRaw;
+    });
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Captured raw ${_liveRaw!} for "${point.label}"'),
-        backgroundColor: _accent,
+        content: Text('Captured unpressed rest baseline (Raw: $_liveRaw)'),
+        backgroundColor: Colors.green,
       ),
     );
   }
 
-  String? _validationError() {
-    final built = <CalibrationPoint>[];
-    for (final p in _points) {
-      if (p.capturedRaw == null) return 'Capture the raw value for every point.';
-      final grams = double.tryParse(p.gramsController.text.trim());
-      if (grams == null || grams < 0) return 'Enter a valid grams value for every point.';
-      built.add(CalibrationPoint(raw: p.capturedRaw!, grams: grams));
-    }
-    final raws = built.map((e) => e.raw).toSet();
-    if (raws.length != 3) return 'The three captured raw values must differ.';
-    return null;
+  void _captureSqueeze() {
+    if (!_online) return;
+    setState(() {
+      _capturedMax = _liveRaw;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Captured maximum squeeze baseline (Raw: $_liveRaw)'),
+        backgroundColor: Colors.green,
+      ),
+    );
   }
 
-  Future<void> _save() async {
-    final error = _validationError();
-    if (error != null) {
+  Future<void> _saveCalibration() async {
+    if (_capturedMin == null || _capturedMax == null) return;
+    if (_capturedMax! >= _capturedMin!) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error), backgroundColor: Colors.redAccent),
+        const SnackBar(content: Text('Error: Maximum squeeze raw value must be lower than the rest value (FSR raw values decrease under pressure).')),
       );
       return;
     }
+
+    final appState = AppStateScope.of(context);
+    final activePatient = appState.activePatient;
+    if (activePatient == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select an active patient on the list first')),
+      );
+      return;
+    }
+
     setState(() => _saving = true);
+
     try {
-      final points = _points
-          .map((p) => CalibrationPoint(
-                raw: p.capturedRaw!,
-                grams: double.parse(p.gramsController.text.trim()),
-              ))
-          .toList();
-      await _api.calibrateForce(points);
+      // 1. Upload to Glove hardware
+      await _api.calibrateForce(
+        forceMin: _capturedMin!,
+        forceMax: _capturedMax!,
+      );
+
+      // 2. Save to Firestore via PatientRepository
+      final repo = PatientRepositoryProvider.getRepository();
+      final Map<String, dynamic> calData = {
+        'flex_min': activePatient.calibration['flex_min'] ?? [0, 0, 0, 0, 0],
+        'flex_max': activePatient.calibration['flex_max'] ?? [4095, 4095, 4095, 4095, 4095],
+        'fsr_coef_a': activePatient.calibration['fsr_coef_a'] ?? 0.0,
+        'fsr_coef_b': activePatient.calibration['fsr_coef_b'] ?? 0.0,
+        'fsr_coef_c': activePatient.calibration['fsr_coef_c'] ?? 0.0,
+        'fo_min': _capturedMin!,
+        'fo_max': _capturedMax!,
+      };
+
+      await repo.updateCalibration(activePatient.id, calData);
+      
+      // Sync local app state
+      await appState.loadPatients();
+
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Force calibration saved to glove'),
+        SnackBar(
+          content: Text('Force calibration saved successfully for ${activePatient.name}!'),
           backgroundColor: _accent,
         ),
       );
-      Navigator.pop(context, true);
+      Navigator.pop(context);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Save failed: $e'), backgroundColor: Colors.redAccent),
+        SnackBar(content: Text('Error saving calibration: $e'), backgroundColor: Colors.redAccent),
       );
     } finally {
-      if (mounted) setState(() => _saving = false);
+      if (mounted) {
+        setState(() => _saving = false);
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final appState = AppStateScope.of(context);
+    final activePatient = appState.activePatient;
+
+    // Calculate dynamic percentage
+    double squeezePercentage = 0.0;
+    if (_capturedMin != null && _capturedMax != null && _capturedMin != _capturedMax) {
+      squeezePercentage = ((_liveRaw - _capturedMin!) / (_capturedMax! - _capturedMin!)).clamp(0.0, 1.0);
+    }
+
     return Scaffold(
-      appBar: AppBar(title: const Text('FSR Calibration')),
-      body: ListView(
+      appBar: AppBar(
+        title: const Text('Force Sensor Calibration'),
+        backgroundColor: const Color(0xFF141722),
+      ),
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
-        children: [
-          _buildBanner(),
-          const SizedBox(height: 20),
-          _buildLiveGauge(),
-          const SizedBox(height: 20),
-          const Text(
-            'Capture points',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            'Place a known weight on the sensor, read the grams from your digital scale, '
-            'type it in, then capture the raw value. Repeat for all three points.',
-            style: TextStyle(color: Colors.grey, fontSize: 13),
-          ),
-          const SizedBox(height: 12),
-          for (final point in _points) _buildPointCard(point),
-          const SizedBox(height: 12),
-          ElevatedButton.icon(
-            onPressed: _saving ? null : _save,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _accent,
-              foregroundColor: Colors.white,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Connection & Active Patient Header
+            Container(
               padding: const EdgeInsets.all(16),
-            ),
-            icon: _saving
-                ? const SizedBox(
-                    width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : const Icon(Icons.save_rounded),
-            label: Text(_saving ? 'Saving…' : 'Save calibration to glove'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBanner() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [_accent, Color(0xFF059669)],
-        ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(Icons.scale_rounded, color: Colors.white, size: 26),
-          ),
-          const SizedBox(width: 14),
-          const Expanded(
-            child: Text(
-              'Map the force sensor to grams using a digital scale',
-              style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLiveGauge() {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: const Color(0xFF141722),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFF232A3D)),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            _online ? Icons.wifi_tethering : Icons.wifi_tethering_off,
-            color: _online ? _accent : Colors.redAccent,
-          ),
-          const SizedBox(width: 14),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                _online ? 'Live raw FSR' : 'Glove offline',
-                style: TextStyle(color: Colors.grey[400], fontSize: 13),
+              decoration: BoxDecoration(
+                color: const Color(0xFF141722),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFF232A3D)),
               ),
-              const SizedBox(height: 2),
-              Text(
-                _liveRaw?.toString() ?? '—',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 30,
-                  fontWeight: FontWeight.bold,
-                  fontFamily: 'monospace',
-                ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: _online ? Colors.green.withOpacity(0.12) : Colors.red.withOpacity(0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      _online ? Icons.wifi_tethering_rounded : Icons.portable_wifi_off_rounded,
+                      color: _online ? Colors.green : Colors.red,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          activePatient != null ? 'Patient: ${activePatient.name}' : 'No active patient selected',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _online ? 'Glove status: Ready to calibrate' : 'Glove status: Offline (Check Wi-Fi)',
+                          style: TextStyle(color: _online ? Colors.green : Colors.red, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
+            ),
+            const SizedBox(height: 20),
 
-  Widget _buildPointCard(_CapturePoint point) {
-    final captured = point.capturedRaw != null;
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFF141722),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: captured ? _accent.withOpacity(0.5) : const Color(0xFF232A3D),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(point.label, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: point.gramsController,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: InputDecoration(
-                    labelText: point.hint,
-                    labelStyle: const TextStyle(color: Colors.grey, fontSize: 13),
-                    enabledBorder: OutlineInputBorder(
-                      borderSide: const BorderSide(color: Color(0xFF232A3D)),
-                      borderRadius: BorderRadius.circular(10),
+            // Live Raw Feed
+            const Text('Live Pinch Force', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFF141722),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFF232A3D)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.between,
+                    children: [
+                      const Text("FSR Sensor", style: TextStyle(fontWeight: FontWeight.bold)),
+                      Text('ADC: $_liveRaw | range: ${_capturedMin ?? 4095} - ${_capturedMax ?? 0}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: squeezePercentage,
+                      minHeight: 12,
+                      backgroundColor: Colors.white.withOpacity(0.08),
+                      valueColor: AlwaysStoppedAnimation<Color>(_accent.withOpacity(0.85)),
                     ),
-                    focusedBorder: OutlineInputBorder(
-                      borderSide: const BorderSide(color: _accent),
-                      borderRadius: BorderRadius.circular(10),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // Wizard Action Steps
+            const Text('Calibration Steps', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        children: [
+                          const Icon(Icons.touch_app_outlined, color: Colors.cyan, size: 28),
+                          const SizedBox(height: 8),
+                          const Text('Step 1: Rest', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                          const SizedBox(height: 4),
+                          const Text('Do NOT touch the sensor', style: TextStyle(fontSize: 10, color: Colors.grey), textAlign: TextAlign.center),
+                          const SizedBox(height: 12),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.cyan,
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            ),
+                            onPressed: _online ? _captureRest : null,
+                            child: const Text('Capture Rest', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                          ),
+                        ],
+                      ),
                     ),
-                    filled: true,
-                    fillColor: const Color(0xFF0D0E15),
                   ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              ElevatedButton(
-                onPressed: _liveRaw == null ? null : () => _capture(point),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0D0E15),
-                  foregroundColor: _accent,
-                  side: const BorderSide(color: _accent),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        children: [
+                          const Icon(Icons.front_hand_rounded, color: Colors.amber, size: 28),
+                          const SizedBox(height: 8),
+                          const Text('Step 2: Squeeze', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                          const SizedBox(height: 4),
+                          const Text('Squeeze at max force', style: TextStyle(fontSize: 10, color: Colors.grey), textAlign: TextAlign.center),
+                          const SizedBox(height: 12),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.amber,
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            ),
+                            onPressed: _online ? _captureSqueeze : null,
+                            child: const Text('Capture Squeeze', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
-                child: const Text('Capture'),
+              ],
+            ),
+            const SizedBox(height: 24),
+
+            // Save Panel
+            if (_capturedMin != null && _capturedMax != null)
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: _accent.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: _accent.withOpacity(0.3)),
+                ),
+                child: Column(
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.check_circle, color: Colors.green),
+                        SizedBox(width: 10),
+                        Text('Calibration capture completed!', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _accent,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        onPressed: _saving ? null : _saveCalibration,
+                        child: _saving
+                            ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                            : const Text('Save Force Limits to Patient', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Icon(
-                captured ? Icons.check_circle : Icons.radio_button_unchecked,
-                size: 16,
-                color: captured ? _accent : Colors.grey,
-              ),
-              const SizedBox(width: 6),
-              Text(
-                captured ? 'Captured raw: ${point.capturedRaw}' : 'Not captured yet',
-                style: TextStyle(color: captured ? _accent : Colors.grey, fontSize: 12.5),
-              ),
-            ],
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

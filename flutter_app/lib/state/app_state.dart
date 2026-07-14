@@ -25,8 +25,14 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> loadPatients() async {
-    _patients = await repository.getAllPatients();
-    notifyListeners();
+    try {
+      _patients = await repository.getAllPatients();
+      notifyListeners();
+    } catch (e) {
+      if (kDebugMode) {
+        print("Error loading patients: $e");
+      }
+    }
   }
 
   Future<Patient> addPatient({required String name, int? age, String? notes}) async {
@@ -56,6 +62,8 @@ class AppState extends ChangeNotifier {
       // Parse list of integers safely from JSON structure
       final flexMin = (cal['flex_min'] as List?)?.map((e) => (e as num).toInt()).toList() ?? [0, 0, 0, 0, 0];
       final flexMax = (cal['flex_max'] as List?)?.map((e) => (e as num).toInt()).toList() ?? [4095, 4095, 4095, 4095, 4095];
+      final forceMin = (cal['fo_min'] as num? ?? 4095).toInt();
+      final forceMax = (cal['fo_max'] as num? ?? 0).toInt();
       
       final api = GloveApiService();
       for (int i = 0; i < 5; i++) {
@@ -67,6 +75,10 @@ class AppState extends ChangeNotifier {
           );
         }
       }
+      
+      // Sync force limits
+      await api.calibrateForce(forceMin: forceMin, forceMax: forceMax);
+      
       await api.sendCommand("ready");
     } catch (e) {
       if (kDebugMode) {

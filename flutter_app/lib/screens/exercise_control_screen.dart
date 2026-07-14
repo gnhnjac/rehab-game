@@ -75,7 +75,12 @@ class _ExerciseControlScreenState extends State<ExerciseControlScreen> {
       List<GloveCube> cubes = const [];
       if (widget.prescription.type == GameType.cubesBoxes) {
         cubes = CubeRegistry.registry.values
-            .map((c) => GloveCube(uid: c.uid, color: c.colorHex, shape: 'cube', weightGrams: 0))
+            .map((c) => GloveCube(
+                  uid: c.uid,
+                  color: c.colorHex,
+                  shape: c.shape,
+                  weightGrams: c.weightGrams,
+                ))
             .toList();
       }
       await _api.sendActivePrescription(

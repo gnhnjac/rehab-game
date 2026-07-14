@@ -383,45 +383,25 @@ inline void handleCalibrateSensor() {
     
     String sensorType = server.arg("sensorType");
     if (sensorType == "force") {
-        String coeffs = server.arg("coefficients"); // "r0,r1,r2,g0,g1,g2"
-        if (coeffs.length() > 0) {
-            int vals[6] = {0};
-            int idx = 0;
-            int start = 0;
-            for (int i = 0; i < coeffs.length(); i++) {
-                if (coeffs.charAt(i) == ',' || i == coeffs.length() - 1) {
-                    int end = (i == coeffs.length() - 1) ? i + 1 : i;
-                    vals[idx++] = coeffs.substring(start, end).toInt();
-                    start = i + 1;
-                    if (idx >= 6) break;
-                }
-            }
+        int fMin = server.arg("forceMin").toInt();
+        int fMax = server.arg("forceMax").toInt();
+        
+        if (fMin > 0 && fMax > 0) {
+            forceMin = fMin;
+            forceMax = fMax;
+            isCalibrated = true;
             
-            if (idx == 6) {
-                fsrCalRaw[0] = vals[0];
-                fsrCalRaw[1] = vals[1];
-                fsrCalRaw[2] = vals[2];
-                fsrCalGrams[0] = vals[3];
-                fsrCalGrams[1] = vals[4];
-                fsrCalGrams[2] = vals[5];
-                
-                preferences.begin("calibration", false);
-                preferences.putInt("fsr_r0", fsrCalRaw[0]);
-                preferences.putInt("fsr_r1", fsrCalRaw[1]);
-                preferences.putInt("fsr_r2", fsrCalRaw[2]);
-                preferences.putInt("fsr_g0", fsrCalGrams[0]);
-                preferences.putInt("fsr_g1", fsrCalGrams[1]);
-                preferences.putInt("fsr_g2", fsrCalGrams[2]);
-                preferences.end();
-                
-                Serial.printf("[Calib] Saved force calibration: Raw=%d,%d,%d -> Grams=%d,%d,%d\n",
-                    fsrCalRaw[0], fsrCalRaw[1], fsrCalRaw[2], fsrCalGrams[0], fsrCalGrams[1], fsrCalGrams[2]);
-                    
-                server.send(200, "text/plain", "Force sensor calibration saved");
-                return;
-            }
+            preferences.begin("calib", false);
+            preferences.putInt("fo_min", fMin);
+            preferences.putInt("fo_max", fMax);
+            preferences.putBool("is_cal", isCalibrated);
+            preferences.end();
+            
+            Serial.printf("[Calib] Saved force limits: Min=%d, Max=%d\n", fMin, fMax);
+            server.send(200, "text/plain", "Force sensor limits saved");
+            return;
         }
-        server.send(400, "text/plain", "Invalid force coefficients");
+        server.send(400, "text/plain", "Invalid force limits");
     }
     else if (sensorType == "flex") {
         int fingerIdx = server.arg("fingerIndex").toInt();
@@ -431,20 +411,15 @@ inline void handleCalibrateSensor() {
         if (fingerIdx >= 0 && fingerIdx < NUM_FINGERS && fMax > fMin) {
             flexMin[fingerIdx] = fMin;
             flexMax[fingerIdx] = fMax;
+            isCalibrated = true;
             
-            preferences.begin("calibration", false);
+            preferences.begin("calib", false);
             char keyMin[16], keyMax[16];
             sprintf(keyMin, "fl_min_%d", fingerIdx);
             sprintf(keyMax, "fl_max_%d", fingerIdx);
             preferences.putInt(keyMin, fMin);
             preferences.putInt(keyMax, fMax);
-            
-            bool allOk = true;
-            for (int i = 0; i < NUM_FINGERS; i++) {
-                if (flexMax[i] <= flexMin[i]) allOk = false;
-            }
-            isCalibrated = allOk;
-            preferences.putBool("is_calibrated", isCalibrated);
+            preferences.putBool("is_cal", isCalibrated);
             preferences.end();
             
             Serial.printf("[Calib] Saved flex finger %d: Min=%d, Max=%d\n", fingerIdx, fMin, fMax);
