@@ -32,4 +32,20 @@ inline void triggerHapticClick() {
     }
 }
 
+inline void triggerHapticContinuous() {
+    if (hapticEnabled) {
+        hapticDrv.setWaveform(0, 47); // Effect 47: Buzz 1 100%
+        hapticDrv.setWaveform(1, 0);  // End sequence
+        hapticDrv.go();
+    }
+}
+
+inline void stopHapticContinuous() {
+    if (hapticEnabled) {
+        hapticDrv.setWaveform(0, 0); // Stop
+        hapticDrv.go();
+    }
+}
+
 #endif
+
