@@ -11,6 +11,9 @@ class DirectTelemetryService implements TelemetryService {
   bool _isPolling = false;
   int _failureCount = 0;
   
+  // Shared persistent HTTP client to support HTTP Keep-Alive
+  http.Client? _client;
+  
   final StreamController<GloveTelemetry> _controller = StreamController<GloveTelemetry>.broadcast();
   final StreamController<String> _logController = StreamController<String>.broadcast();
 
@@ -35,9 +38,10 @@ class DirectTelemetryService implements TelemetryService {
     
     _logController.add("[DirectTelemetry] Connecting to Glove at http://$gloveHost...");
     _failureCount = 0;
+    _client = http.Client(); // Instantiate persistent client
     
-    // Start polling at ~3.3Hz (300ms) to ensure connection stability
-    _pollingTimer = Timer.periodic(const Duration(milliseconds: 300), (timer) async {
+    // Start polling at ~12.5Hz (80ms) for high responsiveness
+    _pollingTimer = Timer.periodic(const Duration(milliseconds: 80), (timer) async {
       if (_isPolling) return; // Prevent overlapping requests
       _isPolling = true;
       await _pollTelemetry();
@@ -46,9 +50,13 @@ class DirectTelemetryService implements TelemetryService {
   }
 
   Future<void> _pollTelemetry() async {
+    if (_client == null) return;
     try {
       final uri = Uri.parse('http://$gloveHost/api/telemetry');
-      final response = await http.get(uri).timeout(const Duration(seconds: 2));
+      // Pass Keep-Alive header to reuse the TCP socket
+      final response = await _client!.get(uri, headers: {
+        'Connection': 'keep-alive',
+      }).timeout(const Duration(milliseconds: 800));
       
       if (response.statusCode == 200) {
         _failureCount = 0; // Reset consecutive failure counter
@@ -62,13 +70,13 @@ class DirectTelemetryService implements TelemetryService {
         _controller.add(telemetry);
       } else {
         _failureCount++;
-        if (_failureCount >= 3) {
+        if (_failureCount >= 5) {
           _handleDisconnect("HTTP error: ${response.statusCode}");
         }
       }
     } catch (e) {
       _failureCount++;
-      if (_failureCount >= 3) {
+      if (_failureCount >= 5) {
         _handleDisconnect(e.toString());
       }
     }
@@ -77,16 +85,17 @@ class DirectTelemetryService implements TelemetryService {
   void _handleDisconnect(String reason) {
     if (_isConnected) {
       _isConnected = false;
-      _logController.add("[DirectTelemetry] Disconnected from Glove (after 3 consecutive failures): $reason");
+      _logController.add("[DirectTelemetry] Disconnected from Glove (after 5 consecutive failures): $reason");
       _controller.add(GloveTelemetry.uncalibrated());
     }
   }
 
   Future<bool> sendCommand(String cmd, int time) async {
+    if (_client == null) return false;
     try {
       final uri = Uri.parse('http://$gloveHost/api/command?cmd=$cmd&time=$time');
       _logController.add("[DirectTelemetry] Sending command: $cmd with time $time to $uri");
-      final response = await http.post(uri).timeout(const Duration(seconds: 2));
+      final response = await _client!.post(uri).timeout(const Duration(seconds: 2));
       if (response.statusCode == 200) {
         _logController.add("[DirectTelemetry] Command sent successfully: ${response.body}");
         return true;
@@ -104,6 +113,8 @@ class DirectTelemetryService implements TelemetryService {
   Future<void> disconnect() async {
     _pollingTimer?.cancel();
     _pollingTimer = null;
+    _client?.close(); // Close connection
+    _client = null;
     _isConnected = false;
     _logController.add("[DirectTelemetry] Disconnected.");
   }
