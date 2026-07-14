@@ -234,7 +234,7 @@ class _FlexCalibrationScreenState extends State<FlexCalibrationScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
-                          mainAxisAlignment: MainAxisAlignment.between,
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(_fingerNames[index], style: const TextStyle(fontWeight: FontWeight.bold)),
                             Text('ADC: $rawVal | range: $minVal - $maxVal', style: const TextStyle(fontSize: 12, color: Colors.grey)),
