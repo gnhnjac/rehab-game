@@ -194,6 +194,10 @@ struct GameSessionState {
     float maxBendRom = 0;
     float sumHoldRom = 0;
     int countHoldRom = 0;
+    
+    // Countdown tracking flags
+    bool played10sPrompt = false;
+    bool played5sPrompt = false;
 };
 
 // Global Game Variables
@@ -328,6 +332,8 @@ inline void startNewGameSession() {
     sessionState.countSteadyForce = 0;
     sessionState.maxBendRom = 0;
     sessionState.sumHoldRom = 0;
+    sessionState.played10sPrompt = false;
+    sessionState.played5sPrompt = false;
     sessionState.countHoldRom = 0;
     
     // Speak Hebrew verbal instruction
@@ -596,13 +602,19 @@ inline void updateGame() {
         return;
     }
     
-    // 2. Play countdown beep every 5 seconds (only if there is an active timer)
-    if (currentPrescription.timerSeconds > 0 && now - sessionState.lastCountdownTime >= 5000) {
-        sessionState.lastCountdownTime = now;
-        playCountdownBeep();
-        
+    // 2. Play countdown prompts at 10s and 5s remaining (only if there is an active timer)
+    if (currentPrescription.timerSeconds > 0) {
         int secRemaining = (sessionState.timerEndMillis - now) / 1000;
-        Serial.printf("[Game] Timer countdown: %ds remaining.\n", secRemaining);
+        if (secRemaining <= 10 && secRemaining > 5 && !sessionState.played10sPrompt) {
+            sessionState.played10sPrompt = true;
+            playAudioTrack(0x0F, 4, 9); // Play "עשר שניות" (04/009.mp3)
+            Serial.println("[Game] Spoken countdown: 10 seconds remaining.");
+        }
+        else if (secRemaining <= 5 && secRemaining > 0 && !sessionState.played5sPrompt) {
+            sessionState.played5sPrompt = true;
+            playAudioTrack(0x0F, 4, 10); // Play "חמש שניות" (04/010.mp3)
+            Serial.println("[Game] Spoken countdown: 5 seconds remaining.");
+        }
     }
     
     // 3. Monitor FSR force during Pinch Grip
