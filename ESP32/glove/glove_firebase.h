@@ -65,7 +65,11 @@ inline void setupWifi() {
         Serial.println(WiFi.localIP());
         Serial.printf("[Wi-Fi] Operating Channel: %d\n", WiFi.channel());
     } else {
-        Serial.println("\n[Wi-Fi] Connection timed out! Operating in standalone ESP-NOW mode.");
+        Serial.println("\n[Wi-Fi] Connection timed out! Starting local Access Point...");
+        WiFi.mode(WIFI_AP_STA);
+        WiFi.softAP("Rehab-Glove-AP", "rehab12345");
+        Serial.print("[Wi-Fi] SoftAP IP Address: ");
+        Serial.println(WiFi.softAPIP());
     }
 }
 

@@ -8,5 +8,6 @@
 // --- Firebase Configuration ---
 // Note: Do not include the trailing slash or "telemetry.json"
 #define FIREBASE_HOST "https://YOUR_DATABASE_NAME.firebaseio.com"
+#define FIREBASE_PROJECT_ID "YOUR_FIREBASE_PROJECT_ID"
 
 #endif // GLOVE_SECRETS_H

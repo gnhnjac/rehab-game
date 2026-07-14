@@ -10,6 +10,10 @@ bool hapticEnabled = false;
 #include "glove_sensors.h"
 #include "glove_firebase.h"
 #include "glove_espnow.h"
+#include "glove_sync.h"
+#include "glove_webserver.h"
+
+WebServer server(80);
 
 // Thread-safe telemetry data structure shared between Cores
 struct SensorTelemetryData {
@@ -44,6 +48,13 @@ void telemetryUploadTask(void* parameter) {
             uploadBoxAction(pendingEvent.cubeId, pendingEvent.timestamp, pendingEvent.isPlaced, pendingEvent.boxIndex);
         }
 
+        // 2. Run sync bridge to upload any buffered offline logs
+        static unsigned long lastSyncTime = 0;
+        if (millis() - lastSyncTime >= 5000) { // Check sync queue every 5 seconds
+            lastSyncTime = millis();
+            syncBufferedLogs();
+        }
+
         // 2. Periodically upload live telemetry
         if (millis() - lastUploadTime >= uploadInterval) {
             lastUploadTime = millis();
@@ -73,9 +84,11 @@ void setup() {
     Serial.println("[Glove] Starting central server...");
 
     setupWifi();
+    setupSPIFFS();
     setupSensors();
     setupHaptic();
     setupEspNow();
+    setupWebServer();
 
     // Create a mutex to protect shared telemetry data across cores
     telemetryMutex = xSemaphoreCreateMutex();
@@ -97,6 +110,9 @@ void setup() {
 }
 
 void loop() {
+    // Handle web server requests
+    server.handleClient();
+
     // Periodically clean up timed-out boxes
     checkBoxTimeouts();
 

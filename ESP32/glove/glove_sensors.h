@@ -17,6 +17,9 @@ int forceMin = 4095;
 int forceMax = 0;
 float forceSmoothed = 0;
 
+#include <Preferences.h>
+
+Preferences preferences;
 bool isCalibrated = false;
 
 inline void setupSensors() {
@@ -25,6 +28,26 @@ inline void setupSensors() {
         pinMode(flexPins[i], INPUT);
     }
     pinMode(FORCE_PIN, INPUT);
+
+    // Load from NVS Preferences
+    preferences.begin("calib", true); // Read-only mode
+    isCalibrated = preferences.getBool("isCalibrated", false);
+    if (isCalibrated) {
+        preferences.getBytes("flexMin", flexMin, sizeof(flexMin));
+        preferences.getBytes("flexMax", flexMax, sizeof(flexMax));
+        forceMin = preferences.getInt("forceMin", 4095);
+        forceMax = preferences.getInt("forceMax", 0);
+        Serial.println("[Sensors] Calibration parameters loaded from NVS successfully.");
+    } else {
+        Serial.println("[Sensors] No valid calibration found in NVS. Awaiting manual/API calibration.");
+    }
+    preferences.end();
+
+    // Initialize smoothed values
+    for (int i = 0; i < NUM_FINGERS; i++) {
+        flexSmoothed[i] = analogRead(flexPins[i]);
+    }
+    forceSmoothed = analogRead(FORCE_PIN);
 }
 
 inline void runSensorCalibration() {
@@ -77,6 +100,16 @@ inline void runSensorCalibration() {
     if (forceMax == forceMin) forceMax++;
 
     isCalibrated = true;
+
+    // Save permanently to Preferences
+    preferences.begin("calib", false); // Read-write mode
+    preferences.putBytes("flexMin", flexMin, sizeof(flexMin));
+    preferences.putBytes("flexMax", flexMax, sizeof(flexMax));
+    preferences.putInt("forceMin", forceMin);
+    preferences.putInt("forceMax", forceMax);
+    preferences.putBool("isCalibrated", isCalibrated);
+    preferences.end();
+
     Serial.println("--- CALIBRATION COMPLETE ---");
     for (int i = 0; i < NUM_FINGERS; i++) {
         Serial.printf("  Finger %d: %d -> %d\n", i + 1, flexMin[i], flexMax[i]);

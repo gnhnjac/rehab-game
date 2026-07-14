@@ -1,0 +1,24 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Patients Collection: Allows read and write for patient profiles and prescriptions
+    match /patients/{patientId} {
+      allow read, write: if true;
+    }
+    
+    // Game History Collection: Allows logging completed sessions and metrics
+    match /game_history/{historyId} {
+      allow read, write: if true;
+    }
+    
+    // Cubes Collection: Allows read/write for mapping NFC tags to physical objects
+    match /cubes/{cubeId} {
+      allow read, write: if true;
+    }
+    
+    // Boxes Collection: Allows read/write for mapping MAC addresses to box profiles
+    match /boxes/{boxId} {
+      allow read, write: if true;
+    }
+  }
+}
