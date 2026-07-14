@@ -185,6 +185,12 @@ inline void OnDataRecv(const uint8_t * incoming_mac, const uint8_t *incomingData
         it->second.last_seen = millis(); // Refresh last seen on event
 
         if (msg.event == EVENT_CUBE_ENTERED) {
+            // Filter duplicate enter events if same cube is already registered in this box
+            if (it->second.current_cube_len == msg.uid_len &&
+                memcmp(it->second.current_cube_uid, msg.uid, msg.uid_len) == 0) {
+                return; // Ignore duplicate
+            }
+
             it->second.current_cube_len = msg.uid_len;
             memcpy(it->second.current_cube_uid, msg.uid, msg.uid_len);
 
@@ -212,6 +218,11 @@ inline void OnDataRecv(const uint8_t * incoming_mac, const uint8_t *incomingData
             triggerHapticClick();
         } 
         else if (msg.event == EVENT_CUBE_LEFT) {
+            // Filter duplicate leave events if no cube is currently registered in this box
+            if (it->second.current_cube_len == 0 && msg.uid_len == 0) {
+                return; // Ignore duplicate
+            }
+
             String cubeId = "";
             uint8_t len = msg.uid_len > 0 ? msg.uid_len : it->second.current_cube_len;
             uint8_t* sourceUid = msg.uid_len > 0 ? msg.uid : it->second.current_cube_uid;

@@ -258,7 +258,11 @@ void sendNfcEvent(CubeEventType event, uint8_t *uid, uint8_t uidLen) {
         memcpy(msg.uid, uid, uidLen <= MAX_CUBE_UID_LEN ? uidLen : MAX_CUBE_UID_LEN);
     }
 
-    esp_now_send(gloveMac, (uint8_t *)&msg, sizeof(msg));
+    // Send 3 times with a short 20ms delay to guarantee packet receipt (redundancy)
+    for (int i = 0; i < 3; i++) {
+        esp_now_send(gloveMac, (uint8_t *)&msg, sizeof(msg));
+        delay(20);
+    }
 }
 
 void setup(void) {

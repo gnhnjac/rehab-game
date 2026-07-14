@@ -462,8 +462,8 @@ inline void updateGame() {
     
     unsigned long now = millis();
     
-    // 1. Check timer expiration
-    if (now >= sessionState.timerEndMillis) {
+    // 1. Check timer expiration (only if timerSeconds is defined > 0)
+    if (currentPrescription.timerSeconds > 0 && now >= sessionState.timerEndMillis) {
         Serial.println("[Game] Session timeout!");
         stopGameSession(false); // Fail due to timeout
         return;

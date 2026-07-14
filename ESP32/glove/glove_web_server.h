@@ -205,10 +205,19 @@ inline void handleTelemetry() {
         xSemaphoreGive(telemetryMutex);
     }
     
+    int timeRemaining = 0;
+    if (sessionState.active) {
+        if (sessionState.timerEndMillis > millis()) {
+            timeRemaining = (sessionState.timerEndMillis - millis()) / 1000;
+        }
+    } else {
+        timeRemaining = localData.time_remaining;
+    }
+
     String json = "{";
     json += "\"calibrated\":" + String(localData.calibrated ? "true" : "false") + ",";
     json += "\"calibrating\":" + String(localData.calibrating ? "true" : "false") + ",";
-    json += "\"time_remaining\":" + String(localData.time_remaining) + ",";
+    json += "\"time_remaining\":" + String(timeRemaining) + ",";
     
     // flex group
     json += "\"flex\":{";
@@ -526,7 +535,8 @@ inline void handleActivePrescription() {
     }
     
     currentPrescription = rx;
-    Serial.printf("[Rx] Received game prescription. GameType: %d\n", rx.gameType);
+    Serial.printf("[Rx] Received prescription: type=%d, cycles=%d, timer=%d, diff=%d, targetWeight=%d, holdTime=%d\n",
+                  rx.gameType, rx.totalCycles, rx.timerSeconds, rx.difficulty, rx.targetWeightGrams, rx.requiredHoldTimeSeconds);
     
     String patientId = server.arg("patientId");
     if (patientId.length() > 0) {

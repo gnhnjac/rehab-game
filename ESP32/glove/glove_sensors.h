@@ -178,7 +178,7 @@ inline void readMappedSensors(int* flexPercent, int& forcePercent) {
 
     int rawForce = analogRead(FORCE_PIN);
     forceSmoothed = (rawForce * filterWeight) + (forceSmoothed * (1.0 - filterWeight));
-    forcePercent = map((int)forceSmoothed, forceMax, forceMin, 0, 100);
+    forcePercent = map((int)forceSmoothed, forceMin, forceMax, 0, 100);
     forcePercent = constrain(forcePercent, 0, 100);
 }
 
@@ -195,7 +195,7 @@ inline void readAllSensors(int* flexRaw, int* flexPercent, int& forceRaw, int& f
     int rawForce = analogRead(FORCE_PIN);
     forceSmoothed = (rawForce * filterWeight) + (forceSmoothed * (1.0 - filterWeight));
     forceRaw = (int)forceSmoothed;
-    forcePercent = map(forceRaw, forceMax, forceMin, 0, 100);
+    forcePercent = map(forceRaw, forceMin, forceMax, 0, 100);
     forcePercent = constrain(forcePercent, 0, 100);
 }
 
