@@ -222,7 +222,7 @@ class _FsrCalibrationScreenState extends State<FsrCalibrationScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.between,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text("FSR Sensor", style: TextStyle(fontWeight: FontWeight.bold)),
                       Text('ADC: $_liveRaw | range: ${_capturedMin ?? 4095} - ${_capturedMax ?? 0}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
