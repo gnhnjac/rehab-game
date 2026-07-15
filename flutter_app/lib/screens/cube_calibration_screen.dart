@@ -118,6 +118,108 @@ class _CubeCalibrationScreenState extends State<CubeCalibrationScreen> {
     }
   }
 
+  Future<void> _editCube(EnrolledCube cube) async {
+    final nameController = TextEditingController(text: cube.name);
+    final weightController = TextEditingController(text: cube.weightGrams.toString());
+    String selectedColor = cube.colorHex;
+    String selectedShape = cube.shape;
+
+    final List<String> colors = ["Red", "Green", "Blue", "Yellow", "Purple", "Cyan", "White"];
+    final List<String> shapes = ["circle", "square", "triangle", "star", "hexagon"];
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xFF141722),
+          title: const Text('Edit Cube Details', style: TextStyle(color: Colors.white)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('UID: ${cube.uid}', style: const TextStyle(color: Colors.grey, fontSize: 12, fontFamily: 'monospace')),
+              const SizedBox(height: 16),
+              TextField(
+                controller: nameController,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  labelText: 'Cube Name',
+                  labelStyle: TextStyle(color: Colors.grey),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: weightController,
+                keyboardType: TextInputType.number,
+                style: const TextStyle(color: Colors.white),
+                decoration: const InputDecoration(
+                  labelText: 'Weight (grams)',
+                  labelStyle: TextStyle(color: Colors.grey),
+                ),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: selectedColor,
+                dropdownColor: const Color(0xFF141722),
+                decoration: const InputDecoration(
+                  labelText: 'Color',
+                  labelStyle: TextStyle(color: Colors.grey),
+                ),
+                items: colors
+                    .map((c) => DropdownMenuItem(
+                          value: c,
+                          child: Text(c, style: const TextStyle(color: Colors.white)),
+                        ))
+                    .toList(),
+                onChanged: (val) => setDialogState(() => selectedColor = val ?? selectedColor),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                value: selectedShape,
+                dropdownColor: const Color(0xFF141722),
+                decoration: const InputDecoration(
+                  labelText: 'Shape',
+                  labelStyle: TextStyle(color: Colors.grey),
+                ),
+                items: shapes
+                    .map((s) => DropdownMenuItem(
+                          value: s,
+                          child: Text(s, style: const TextStyle(color: Colors.white)),
+                        ))
+                    .toList(),
+                onChanged: (val) => setDialogState(() => selectedShape = val ?? selectedShape),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final name = nameController.text.trim();
+                if (name.isEmpty) return;
+                final weightVal = int.tryParse(weightController.text.trim()) ?? 100;
+
+                await CubeRegistry.enrollCube(cube.uid, name, selectedColor, selectedShape, weightVal);
+                if (context.mounted) Navigator.pop(context, true);
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: _accent, foregroundColor: Colors.white),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (saved == true) {
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Cube details updated successfully!')),
+      );
+    }
+  }
+
   Color _getColorFromLabel(String label) {
     switch (label) {
       case "Red": return Colors.red;
@@ -382,9 +484,18 @@ class _CubeCalibrationScreenState extends State<CubeCalibrationScreen> {
                         'UID: ${cube.uid} · Color: ${cube.colorHex} · Shape: ${cube.shape} · Weight: ${cube.weightGrams}g',
                         style: const TextStyle(fontSize: 11, color: Colors.grey),
                       ),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                        onPressed: () => _deleteCube(cube.uid),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.edit_outlined, color: Colors.amberAccent),
+                            onPressed: () => _editCube(cube),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                            onPressed: () => _deleteCube(cube.uid),
+                          ),
+                        ],
                       ),
                     ),
                   );
