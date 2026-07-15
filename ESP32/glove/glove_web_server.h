@@ -326,7 +326,6 @@ inline void handleCommand() {
     } else if (cmd == "ready" || cmd == "green_light") {
         uint8_t broadcastMac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
         sendLedColorToBox(broadcastMac, 0, 255, 0); // Green light
-        playSuccessSound();
         server.send(200, "text/plain", "Ready signal sent (green light)");
     } else {
         server.send(400, "text/plain", "Unsupported command");
