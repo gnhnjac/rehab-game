@@ -90,36 +90,6 @@ class PatientListScreen extends StatelessWidget {
                     Expanded(
                       child: _buildCalibrationCard(
                         context: context,
-                        icon: Icons.scale_rounded,
-                        title: 'Force Sensor',
-                        subtitle: 'Calibrate FSR',
-                        color: const Color(0xFF8B5CF6),
-                        enabled: activePatient != null,
-                        onTap: () => Navigator.push(context,
-                            MaterialPageRoute(builder: (_) => const FsrCalibrationScreen())),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _buildCalibrationCard(
-                        context: context,
-                        icon: Icons.back_hand_rounded,
-                        title: 'Flex Sensors',
-                        subtitle: 'Patient Range',
-                        color: const Color(0xFF3B82F6),
-                        enabled: activePatient != null,
-                        onTap: () => Navigator.push(context,
-                            MaterialPageRoute(builder: (_) => const FlexCalibrationScreen())),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildCalibrationCard(
-                        context: context,
                         icon: Icons.grid_view_rounded,
                         title: 'Smart Boxes',
                         subtitle: 'Flash LEDs',

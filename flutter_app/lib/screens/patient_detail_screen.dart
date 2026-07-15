@@ -11,18 +11,35 @@ import 'analytics_screen.dart';
 import 'exercise_control_screen.dart';
 import 'patient_form_screen.dart';
 import 'prescription_edit_screen.dart';
+import 'fsr_calibration_screen.dart';
+import 'flex_calibration_screen.dart';
 
-class PatientDetailScreen extends StatelessWidget {
+class PatientDetailScreen extends StatefulWidget {
   final String patientId;
 
   const PatientDetailScreen({super.key, required this.patientId});
+
+  @override
+  State<PatientDetailScreen> createState() => _PatientDetailScreenState();
+}
+
+class _PatientDetailScreenState extends State<PatientDetailScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        AppStateScope.of(context).setActivePatient(widget.patientId);
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final appState = AppStateScope.of(context);
     final Patient? patient = appState.patients
         .cast<Patient?>()
-        .firstWhere((p) => p!.id == patientId, orElse: () => null);
+        .firstWhere((p) => p!.id == widget.patientId, orElse: () => null);
 
     if (patient == null) {
       return Scaffold(
@@ -31,7 +48,6 @@ class PatientDetailScreen extends StatelessWidget {
       );
     }
 
-    final isActive = appState.activePatient?.id == patient.id;
     final avatarColor = colorForPatientId(patient.id);
     final gameTypes = [GameType.cubesBoxes, GameType.pinch, GameType.bend];
 
@@ -132,32 +148,83 @@ class PatientDetailScreen extends StatelessWidget {
                     ),
                   ),
                 ],
-                const SizedBox(height: 16),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: isActive
-                        ? null
-                        : () {
-                            appState.setActivePatient(patient.id);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('${patient.name} set as active patient')),
-                            );
-                          },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: avatarColor,
-                      disabledBackgroundColor: Colors.white.withOpacity(0.85),
-                      disabledForegroundColor: avatarColor,
-                    ),
-                    icon: Icon(isActive ? Icons.check_circle_rounded : Icons.person_pin_rounded),
-                    label: Text(isActive ? 'Active Patient' : 'Set Active Patient'),
-                  ),
-                ),
               ],
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
+          // Calibration Actions Card
+          Card(
+            color: const Color(0xFF1E293B),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(color: Colors.white.withOpacity(0.05)),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.tune_rounded, color: Color(0xFF8B5CF6)),
+                      SizedBox(width: 10),
+                      Text(
+                        'Sensor Calibration',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const FsrCalibrationScreen()),
+                            );
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF8B5CF6),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          icon: const Icon(Icons.scale_rounded, size: 18),
+                          label: const Text('Force (FSR)'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const FlexCalibrationScreen()),
+                            );
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF3B82F6),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                          icon: const Icon(Icons.back_hand_rounded, size: 18),
+                          label: const Text('Flex Sensors'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
           OutlinedButton.icon(
             onPressed: () {
               Navigator.push(
@@ -226,6 +293,17 @@ class PatientDetailScreen extends StatelessWidget {
                       else if (cube.colorHex.toLowerCase() == 'blue') displayColor = Colors.blueAccent;
                       else if (cube.colorHex.toLowerCase() == 'yellow') displayColor = Colors.yellowAccent;
 
+                      IconData shapeIcon = Icons.crop_square_rounded;
+                      if (cube.shape.toLowerCase() == 'circle') {
+                        shapeIcon = Icons.circle;
+                      } else if (cube.shape.toLowerCase() == 'triangle') {
+                        shapeIcon = Icons.change_history_rounded;
+                      } else if (cube.shape.toLowerCase() == 'star') {
+                        shapeIcon = Icons.star_rounded;
+                      } else if (cube.shape.toLowerCase() == 'hexagon') {
+                        shapeIcon = Icons.hexagon_rounded;
+                      }
+
                       return CheckboxListTile(
                         value: isSelected,
                         activeColor: const Color(0xFF8B5CF6),
@@ -235,7 +313,7 @@ class PatientDetailScreen extends StatelessWidget {
                           'Shape: ${cube.shape} · Color: ${cube.colorHex} · Weight: ${cube.weightGrams}g',
                           style: const TextStyle(color: Colors.grey, fontSize: 12),
                         ),
-                        secondary: Icon(Icons.crop_square_rounded, color: displayColor),
+                        secondary: Icon(shapeIcon, color: displayColor),
                         onChanged: (checked) {
                           if (checked == null) return;
                           final currentActive = patient.activeCubeUids.isEmpty
