@@ -271,6 +271,8 @@ void checkHeartbeats() {
     AppMessage hbMsg;
     hbMsg.type = MSG_TYPE_HEARTBEAT;
     memcpy(hbMsg.box_mac, myMac, 6);
+    hbMsg.uid_len = 1;
+    hbMsg.uid[0] = 1; // Identify as Main Box for audio commands
     esp_err_t result = esp_now_send(gloveMac, (uint8_t *)&hbMsg, sizeof(hbMsg));
     if (result != ESP_OK) {
         Serial.printf("[Heartbeat] Error sending to Glove: 0x%02X\n", result);
@@ -346,20 +348,13 @@ void sendButtonPressEvent(bool isLongPress) {
 
 void checkButton() {
     static bool lastButtonState = HIGH;
+    static unsigned long lastDebounceTime = 0;
     bool currentButtonState = digitalRead(BUTTON_PIN);
     if (currentButtonState == LOW && lastButtonState == HIGH) {
-        delay(50); // debounce
-        if (digitalRead(BUTTON_PIN) == LOW) {
-            unsigned long pressStart = millis();
-            while (digitalRead(BUTTON_PIN) == LOW) {
-                delay(10);
-            }
-            unsigned long duration = millis() - pressStart;
-            if (duration > 1500) {
-                sendButtonPressEvent(true); // Long press -> Calibrate
-            } else {
-                sendButtonPressEvent(false); // Short press -> Start/Stop
-            }
+        unsigned long now = millis();
+        if (now - lastDebounceTime > 250) { // 250ms debounce
+            lastDebounceTime = now;
+            sendButtonPressEvent(false); // Trigger start/stop immediately
         }
     }
     lastButtonState = currentButtonState;
@@ -440,7 +435,7 @@ void loop(void) {
       sendNfcEvent(EVENT_CUBE_ENTERED, uid, uidLength);
       
       int consecutiveFailures = 0;
-      while (consecutiveFailures < 5) {
+      while (consecutiveFailures < 12) {
         updateLeds();
         checkHeartbeats();
         if (!isRegistered) break;
@@ -448,7 +443,7 @@ void loop(void) {
         // Monitor button even while cube is present
         checkButton();
 
-        delay(100);
+        delay(50);
         uint8_t pollUid[7];
         uint8_t pollUidLength = 0;
         bool pollSuccess = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, pollUid, &pollUidLength, 100);

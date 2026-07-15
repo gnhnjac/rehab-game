@@ -249,13 +249,13 @@ inline void saveSessionResultLocally(int gameType, int successes, int failures, 
     // 3. Construct the metrics JSON string in Firestore REST format
     String metricsJson = "";
     if (gameType == 1) { // CubesBoxes
-        metricsJson = "{\"avgResponseTimeSeconds\":{\"doubleValue\":" + String(avgRespTimeMs / 1000.0) + "},\"levelCompleted\":{\"integerValue\":\"" + String(successes) + "\"}}";
+        metricsJson = "{\"avgResponseTimeMs\":{\"doubleValue\":" + String((double)avgRespTimeMs) + "},\"avgGripForceGrams\":{\"doubleValue\":" + String(avgForceOrRom) + "},\"levelCompleted\":{\"integerValue\":\"" + String(successes) + "\"}}";
     }
     else if (gameType == 2) { // Pinch
-        metricsJson = "{\"avgSteadyStateForceGrams\":{\"doubleValue\":" + String(avgForceOrRom) + "},\"maxHoldTimeSeconds\":{\"doubleValue\":" + String(avgRespTimeMs / 1000.0) + "},\"succeeded\":{\"booleanValue\":true}}";
+        metricsJson = "{\"avgGripForceGrams\":{\"doubleValue\":" + String(avgForceOrRom) + "},\"avgResponseTimeMs\":{\"doubleValue\":" + String((double)avgRespTimeMs) + "},\"succeeded\":{\"booleanValue\":true}}";
     }
     else if (gameType == 3) { // Bend
-        metricsJson = "{\"avgRomReached\":{\"arrayValue\":{\"values\":[{\"integerValue\":\"" + String((int)avgForceOrRom) + "\"}]}},\"sequenceCompleted\":{\"booleanValue\":true}}";
+        metricsJson = "{\"avgRomPercent\":{\"doubleValue\":" + String(avgForceOrRom) + "},\"avgResponseTimeMs\":{\"doubleValue\":" + String((double)avgRespTimeMs) + "},\"sequenceCompleted\":{\"booleanValue\":true}}";
     } else {
         metricsJson = "{}";
     }

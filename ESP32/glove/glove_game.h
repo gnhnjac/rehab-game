@@ -184,15 +184,60 @@ inline void selectNextCubesBoxesTarget() {
         return;
     }
     
-    // Choose target box MAC
-    auto it = boxRegistry.begin();
-    int randBoxIdx = random(0, boxRegistry.size());
-    for (int i = 0; i < randBoxIdx && it != boxRegistry.end(); i++) {
-        it++;
-    }
-    if (it == boxRegistry.end()) it = boxRegistry.begin();
+    // Save previous target MAC and Cube Color
+    uint8_t prevBoxMac[6];
+    memcpy(prevBoxMac, sessionState.targetBoxMac, 6);
+    String prevCubeColor = String(sessionState.targetCube.color);
     
-    memcpy(sessionState.targetBoxMac, it->second.mac, 6);
+    auto it = boxRegistry.begin();
+    int randCubeIdx = 0;
+    bool foundNew = false;
+    int totalCombos = boxRegistry.size() * (currentPrescription.cubesCount > 0 ? currentPrescription.cubesCount : 1);
+    
+    for (int attempt = 0; attempt < 10; attempt++) {
+        // Pick random box
+        it = boxRegistry.begin();
+        int randBoxIdx = random(0, boxRegistry.size());
+        for (int i = 0; i < randBoxIdx && it != boxRegistry.end(); i++) {
+            it++;
+        }
+        if (it == boxRegistry.end()) it = boxRegistry.begin();
+        
+        // Pick random cube
+        RxCube candidateCube;
+        if (currentPrescription.cubesCount > 0) {
+            randCubeIdx = random(0, currentPrescription.cubesCount);
+            candidateCube = currentPrescription.cubes[randCubeIdx];
+        } else {
+            strcpy(candidateCube.color, "Red");
+            strcpy(candidateCube.shape, "Circle");
+            candidateCube.weightGrams = 100;
+            candidateCube.uid_len = 0;
+        }
+        
+        bool isSameBox = (memcmp(it->second.mac, prevBoxMac, 6) == 0);
+        bool isSameColor = (String(candidateCube.color) == prevCubeColor);
+        
+        if (totalCombos <= 1 || !(isSameBox && isSameColor)) {
+            memcpy(sessionState.targetBoxMac, it->second.mac, 6);
+            sessionState.targetCube = candidateCube;
+            foundNew = true;
+            break;
+        }
+    }
+    
+    if (!foundNew) {
+        it = boxRegistry.begin();
+        memcpy(sessionState.targetBoxMac, it->second.mac, 6);
+        if (currentPrescription.cubesCount > 0) {
+            sessionState.targetCube = currentPrescription.cubes[0];
+        } else {
+            strcpy(sessionState.targetCube.color, "Red");
+            strcpy(sessionState.targetCube.shape, "Circle");
+            sessionState.targetCube.weightGrams = 100;
+            sessionState.targetCube.uid_len = 0;
+        }
+    }
     
     // Translate key to index in registry
     int idx = 0;
@@ -202,18 +247,6 @@ inline void selectNextCubesBoxesTarget() {
             break;
         }
         idx++;
-    }
-    
-    // Choose target cube
-    if (currentPrescription.cubesCount > 0) {
-        int randCubeIdx = random(0, currentPrescription.cubesCount);
-        sessionState.targetCube = currentPrescription.cubes[randCubeIdx];
-    } else {
-        // Fallback default Red cube
-        strcpy(sessionState.targetCube.color, "Red");
-        strcpy(sessionState.targetCube.shape, "Circle");
-        sessionState.targetCube.weightGrams = 100;
-        sessionState.targetCube.uid_len = 0;
     }
     
     // Get RGB target
@@ -287,10 +320,12 @@ inline void startNewGameSession() {
             sessionState.targetCube = currentPrescription.cubes[0];
         } else {
             strcpy(sessionState.targetCube.color, "Red");
+            strcpy(sessionState.targetCube.shape, "Circle");
             sessionState.targetCube.weightGrams = 100;
+            sessionState.targetCube.uid_len = 0;
         }
         
-        // Find which box to use (first box with a cube, or first box)
+        // Find which box to use
         bool foundBox = false;
         for (const auto& pair : boxRegistry) {
             memcpy(sessionState.targetBoxMac, pair.second.mac, 6);
@@ -304,11 +339,60 @@ inline void startNewGameSession() {
             colorToRgb(sessionState.targetCube.color, r, g, b);
             sendLedColorToBox(sessionState.targetBoxMac, r, g, b);
         }
+
+        // Check if the target cube is already placed in any box
+        bool alreadyPlaced = false;
+        for (const auto& pair : boxRegistry) {
+            const RegisteredBox& box = pair.second;
+            if (box.current_cube_len > 0) {
+                String boxCubeUid = "";
+                for (int j = 0; j < box.current_cube_len; j++) {
+                    char hex[3];
+                    sprintf(hex, "%02X", box.current_cube_uid[j]);
+                    boxCubeUid += hex;
+                }
+                
+                String targetUid = "";
+                for (int j = 0; j < sessionState.targetCube.uid_len; j++) {
+                    char hex[3];
+                    sprintf(hex, "%02X", sessionState.targetCube.uid[j]);
+                    targetUid += hex;
+                }
+                
+                if (targetUid.length() == 0 || targetUid == boxCubeUid) {
+                    alreadyPlaced = true;
+                    if (foundBox) {
+                        memcpy(sessionState.targetBoxMac, box.mac, 6);
+                    }
+                    break;
+                }
+            }
+        }
         
-        // Voice: "Place the correct weight in the box"
-        delay(3000); // Let start prompt finish
-        playTrack(2, 5); // 02/005.mp3
-        Serial.println("[Game-Pinch] Phase 0: Waiting for cube placement in box.");
+        if (alreadyPlaced) {
+            Serial.println("[Game-Pinch] Target cube is already placed. Advancing to Phase 1 immediately.");
+            sessionState.currentStepInSequence = 1;
+            
+            // Light box in target color
+            if (foundBox) {
+                uint8_t r, g, b;
+                colorToRgb(sessionState.targetCube.color, r, g, b);
+                sendLedColorToBox(sessionState.targetBoxMac, r, g, b);
+            }
+            
+            // Voice: "Lift and hold for X seconds"
+            int holdSec = currentPrescription.requiredHoldTimeSeconds;
+            int trackNum = 5 + (holdSec / 5);
+            if (trackNum < 6) trackNum = 6;
+            if (trackNum > 11) trackNum = 11;
+            delay(3000); // Let start prompt finish
+            playTrack(2, trackNum);
+        } else {
+            // Voice: "Place the correct weight in the box"
+            delay(3000); // Let start prompt finish
+            playTrack(2, 5); // 02/005.mp3
+            Serial.println("[Game-Pinch] Phase 0: Waiting for cube placement in box.");
+        }
     }
 }
 
@@ -328,9 +412,23 @@ inline void stopGameSession(bool completedSuccessfully) {
     
     // Play end prompt
     if (completedSuccessfully) {
-        playSuccessSound(); // Say "הצלחה" at the end!
-        delay(1200);
-        playCompletionSound();
+        if (currentPrescription.gameType == GAME_CUBES_BOXES) {
+            playCubesBoxesSuccess();
+            delay(1500);
+            playCubesBoxesCompletion();
+        } else if (currentPrescription.gameType == GAME_PINCH) {
+            playPinchSuccess();
+            delay(1500);
+            playPinchCompletion();
+        } else if (currentPrescription.gameType == GAME_BEND) {
+            playBendSuccess();
+            delay(1500);
+            playBendCompletion();
+        } else {
+            playSuccessSound();
+            delay(1200);
+            playCompletionSound();
+        }
         sendSuccessFlashToBoxes();
     } else {
         playTimeoutSound();
@@ -343,12 +441,16 @@ inline void stopGameSession(bool completedSuccessfully) {
         avgRespTime = sessionState.totalResponseTimeMs / sessionState.successCount;
     }
     
-    float avgForceOrRom = 0; // For Pinch or Bend
+    float avgForceOrRom = 0; // For Pinch or Bend or CubesBoxes
     if (currentPrescription.gameType == GAME_PINCH) {
         if (sessionState.countSteadyForce > 0) {
             avgForceOrRom = sessionState.sumSteadyForce / sessionState.countSteadyForce;
         } else {
             avgForceOrRom = currentPrescription.targetWeightGrams; // Fallback
+        }
+    } else if (currentPrescription.gameType == GAME_CUBES_BOXES) {
+        if (sessionState.countSteadyForce > 0) {
+            avgForceOrRom = sessionState.sumSteadyForce / sessionState.countSteadyForce;
         }
     } else if (currentPrescription.gameType == GAME_BEND) {
         avgForceOrRom = sessionState.maxBendRom;
@@ -373,6 +475,7 @@ inline void handleLocalNfcEvent(String cubeId, int boxIndex, bool isPlaced, cons
                   
     if (currentPrescription.gameType == GAME_CUBES_BOXES) {
         if (isPlaced) {
+            sessionState.isHolding = false;
             // Match the cube details
             RxCube insertedCube;
             bool foundCube = false;
@@ -400,7 +503,7 @@ inline void handleLocalNfcEvent(String cubeId, int boxIndex, bool isPlaced, cons
                     sessionState.totalResponseTimeMs += (millis() - sessionState.lastActionTime);
                     sessionState.currentCycle++;
                     
-                    playSuccessSound();
+                    playCubesBoxesSuccess();
                     // Visual success: Turn correct box white for 1 second
                     sendLedColorToBox(boxMac, 255, 255, 255);
                     delay(1000);
@@ -435,7 +538,7 @@ inline void handleLocalNfcEvent(String cubeId, int boxIndex, bool isPlaced, cons
                     sessionState.totalResponseTimeMs += (millis() - sessionState.lastActionTime);
                     sessionState.currentCycle++;
                     
-                    playSuccessSound();
+                    playCubesBoxesSuccess();
                     // Visual success: Turn correct box white for 1 second
                     sendLedColorToBox(boxMac, 255, 255, 255);
                     delay(1000);
@@ -471,7 +574,7 @@ inline void handleLocalNfcEvent(String cubeId, int boxIndex, bool isPlaced, cons
                     sessionState.totalResponseTimeMs += (millis() - sessionState.lastActionTime);
                     sessionState.currentCycle++;
                     
-                    playSuccessSound();
+                    playCubesBoxesSuccess();
                     // Visual success: Turn correct box white for 1 second
                     sendLedColorToBox(boxMac, 255, 255, 255);
                     delay(1000);
@@ -495,9 +598,16 @@ inline void handleLocalNfcEvent(String cubeId, int boxIndex, bool isPlaced, cons
                     sendLedColorToBox(sessionState.targetBoxMac, r, g, b);
                 }
             }
+        } else {
+            // Cube lifted — start carry force monitoring
+            sessionState.isHolding = true;
+            sessionState.holdStartTime = millis();
+            Serial.println("[Game-CubesBoxes] Cube lifted. Carrying started.");
         }
     }
     else if (currentPrescription.gameType == GAME_PINCH) {
+        if (memcmp(boxMac, sessionState.targetBoxMac, 6) != 0) return;
+        
         // Phase 0: Waiting for cube placement
         if (sessionState.currentStepInSequence == 0) {
             if (isPlaced) {
@@ -585,6 +695,23 @@ inline void updateGame() {
     if (!sessionState.active) return;
     
     unsigned long now = millis();
+
+    // Accumulate force metrics when holding/carrying a cube/block
+    if (currentPrescription.gameType == GAME_CUBES_BOXES || currentPrescription.gameType == GAME_PINCH) {
+        bool isPinchHold = (currentPrescription.gameType == GAME_PINCH && sessionState.currentStepInSequence == 2 && sessionState.isHolding);
+        bool isCubesCarry = (currentPrescription.gameType == GAME_CUBES_BOXES && sessionState.isHolding);
+        
+        if (isPinchHold || isCubesCarry) {
+            int currentForceRaw = 0;
+            if (xSemaphoreTake(telemetryMutex, 0) == pdTRUE) {
+                currentForceRaw = sharedTelemetry.forceRaw;
+                xSemaphoreGive(telemetryMutex);
+            }
+            float forceGrams = getFsrForceGrams(currentForceRaw);
+            sessionState.sumSteadyForce += forceGrams;
+            sessionState.countSteadyForce++;
+        }
+    }
     
     // 1. Check timer expiration (only if timerSeconds is defined > 0)
     if (currentPrescription.timerSeconds > 0 && now >= sessionState.timerEndMillis) {
@@ -619,7 +746,7 @@ inline void updateGame() {
                 sessionState.currentCycle++;
                 sessionState.isHolding = false;
                 
-                playSuccessSound();
+                playPinchSuccess();
                 sendSuccessFlashToBoxes();
                 
                 if (sessionState.currentCycle >= currentPrescription.totalCycles) {
@@ -652,39 +779,64 @@ inline void updateGame() {
         
         int targetRom = currentPrescription.requiredRom[0];
         
-        if (maxFlexPct >= targetRom) {
-            if (!sessionState.isHolding) {
+        // Phase 0: Waiting for release (straight hand, flex < 20%)
+        if (sessionState.currentStepInSequence == 0) {
+            if (maxFlexPct < 20) {
+                Serial.println("[Game-Bend] Hand straight. Phase 1: Prompting bend.");
+                sessionState.currentStepInSequence = 1;
+                playTrack(3, 2); // "כופף את האצבע והחזק אותה מכופפת"
+            }
+        }
+        // Phase 1: Waiting for bend (flex >= targetRom)
+        else if (sessionState.currentStepInSequence == 1) {
+            if (maxFlexPct >= targetRom) {
+                Serial.println("[Game-Bend] ROM target reached! Phase 2: Start hold.");
+                sessionState.currentStepInSequence = 2;
                 sessionState.isHolding = true;
                 sessionState.holdStartTime = now;
-                playHoldPrompt();
+                playHoldPrompt(); // "החזק"
             }
-            
-            triggerHapticContinuous();
-            
-            if (maxFlexPct > sessionState.maxBendRom) {
-                sessionState.maxBendRom = maxFlexPct;
-            }
-            
-            // Check hold duration
-            if (now - sessionState.holdStartTime >= currentPrescription.requiredHoldTimeSeconds * 1000) {
-                Serial.println("[Game-Bend] Cycle completed successfully!");
-                stopHapticContinuous();
-                playSuccessSound(); // Success chime upon cycle completion
-                sessionState.isHolding = false;
-                sessionState.successCount++;
-                sessionState.currentCycle++;
+        }
+        // Phase 2: Holding
+        else if (sessionState.currentStepInSequence == 2) {
+            if (maxFlexPct >= targetRom) {
+                triggerHapticContinuous();
                 
-                if (sessionState.currentCycle >= currentPrescription.totalCycles) {
-                    stopGameSession(true);
-                } else {
-                    playStartPrompt(GAME_BEND, 1);
+                if (maxFlexPct > sessionState.maxBendRom) {
+                    sessionState.maxBendRom = maxFlexPct;
                 }
-            }
-        } else {
-            stopHapticContinuous();
-            if (sessionState.isHolding) {
+                
+                // Check hold duration
+                if (now - sessionState.holdStartTime >= (unsigned long)currentPrescription.requiredHoldTimeSeconds * 1000) {
+                    Serial.println("[Game-Bend] Cycle completed successfully!");
+                    stopHapticContinuous();
+                    playBendSuccess(); // "כיפוף מעולה, שחרר את האצבע."
+                    
+                    sessionState.isHolding = false;
+                    sessionState.successCount++;
+                    sessionState.currentCycle++;
+                    
+                    if (sessionState.currentCycle >= currentPrescription.totalCycles) {
+                        stopGameSession(true);
+                    } else {
+                        // Go back to Phase 0 (waiting for release)
+                        sessionState.currentStepInSequence = 0;
+                        delay(2000); // Give time for success prompt to speak
+                        playReleasePrompt(); // "שחרר את האצבע" (04/008)
+                    }
+                }
+            } else {
+                // Released too early - failure
+                Serial.println("[Game-Bend] Released too early. Failure!");
+                stopHapticContinuous();
                 sessionState.isHolding = false;
+                sessionState.failureCount++;
                 playFailureSound();
+                
+                // Go back to Phase 1 (waiting for bend)
+                sessionState.currentStepInSequence = 1;
+                delay(1500);
+                playTrack(3, 2); // Re-prompt bend
             }
         }
     }

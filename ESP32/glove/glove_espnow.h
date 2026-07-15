@@ -171,11 +171,18 @@ inline void OnDataRecv(const uint8_t * incoming_mac, const uint8_t *incomingData
     }
     else if (msg.type == MSG_TYPE_HEARTBEAT) {
         auto it = boxRegistry.find(boxKey);
+        bool isMain = (msg.uid_len > 0 && msg.uid[0] == 1);
+        
         if (it != boxRegistry.end()) {
             it->second.last_seen = millis();
             Serial.print("[Glove] Heartbeat received from Box: ");
             printMac(incoming_mac);
             Serial.println();
+            
+            if (isMain) {
+                memcpy(mainBoxMac, incoming_mac, 6);
+                mainBoxRegistered = true;
+            }
             
             // Reply with heartbeat response
             AppMessage reply_msg;
@@ -189,9 +196,52 @@ inline void OnDataRecv(const uint8_t * incoming_mac, const uint8_t *incomingData
                 selectNextCubesBoxesTarget();
             }
         } else {
-            Serial.print("[Glove] Heartbeat received from UNREGISTERED Box: ");
+            Serial.print("[Glove] Heartbeat from UNREGISTERED Box. Auto-registering: ");
             printMac(incoming_mac);
             Serial.println();
+
+            if (isMain) {
+                memcpy(mainBoxMac, incoming_mac, 6);
+                mainBoxRegistered = true;
+                Serial.println("[Glove] Unregistered heartbeat recognized as MAIN Box. Registered!");
+            }
+
+            if (boxRegistry.size() < MAX_BOXES) {
+                RegisteredBox newBox;
+                memcpy(newBox.mac, incoming_mac, 6);
+                newBox.active = true;
+                newBox.current_cube_len = 0;
+                memset(newBox.current_cube_uid, 0, MAX_CUBE_UID_LEN);
+                newBox.last_seen = millis();
+                
+                boxRegistry[boxKey] = newBox;
+
+                // Add box as peer
+                esp_now_peer_info_t peerInfo;
+                memset(&peerInfo, 0, sizeof(peerInfo));
+                memcpy(peerInfo.peer_addr, incoming_mac, 6);
+                peerInfo.channel = 0;
+                peerInfo.encrypt = false;
+                peerInfo.ifidx = isAPMode ? WIFI_IF_AP : WIFI_IF_STA;
+
+                if (!esp_now_is_peer_exist(incoming_mac)) {
+                    if (esp_now_add_peer(&peerInfo) != ESP_OK) {
+                        Serial.println("[Glove] Error: Failed to add Box as peer.");
+                    }
+                }
+
+                // Send ACK back to the box so it transitions to registered state
+                AppMessage ack_msg;
+                ack_msg.type = MSG_TYPE_ACK;
+                WiFi.macAddress(ack_msg.box_mac);
+                esp_now_send(incoming_mac, (uint8_t *)&ack_msg, sizeof(ack_msg));
+
+                if (sessionState.active && currentPrescription.gameType == GAME_CUBES_BOXES && 
+                    isMacZero(sessionState.targetBoxMac)) {
+                    Serial.println("[ESP-NOW] Target box auto-selected on auto-registration.");
+                    selectNextCubesBoxesTarget();
+                }
+            }
         }
     }
     else if (msg.type == MSG_TYPE_EVENT) {

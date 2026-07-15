@@ -70,6 +70,30 @@ inline void playCompletionSound() {
     playTrack(4, 4);
 }
 
+inline void playCubesBoxesSuccess() {
+    playTrack(4, 13);
+}
+
+inline void playPinchSuccess() {
+    playTrack(4, 14);
+}
+
+inline void playBendSuccess() {
+    playTrack(4, 15);
+}
+
+inline void playCubesBoxesCompletion() {
+    playTrack(4, 16);
+}
+
+inline void playPinchCompletion() {
+    playTrack(4, 17);
+}
+
+inline void playBendCompletion() {
+    playTrack(4, 18);
+}
+
 inline void playTimeoutSound() {
     playTrack(4, 5);
 }

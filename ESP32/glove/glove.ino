@@ -99,6 +99,7 @@ void setup() {
 
     Serial.begin(115200);
     delay(1000);
+    randomSeed(analogRead(34));
     Serial.println("[Glove] Central server starting...");
 
     setupNetwork();

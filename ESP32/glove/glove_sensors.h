@@ -54,8 +54,8 @@ inline void setupSensors() {
     } else {
         Serial.println("[Sensors] No valid calibration found in NVS. Using default bounds.");
         for (int i = 0; i < NUM_FINGERS; i++) {
-            flexMin[i] = 0;
-            flexMax[i] = 4095;
+            flexMin[i] = 2200; // Straight
+            flexMax[i] = 1500; // Bent
         }
         forceMin = 4095;
         forceMax = 0;
@@ -75,6 +75,15 @@ extern SemaphoreHandle_t telemetryMutex;
 inline void readMappedSensors(int* flexPercent, int& forcePercent) {
     for (int i = 0; i < NUM_FINGERS; i++) {
         int raw = analogRead(flexPins[i]);
+        if (!isCalibrated) {
+            if (flexMin[i] > flexMax[i]) {
+                if (raw > flexMin[i]) flexMin[i] = raw;
+                if (raw < flexMax[i]) flexMax[i] = raw;
+            } else {
+                if (raw < flexMin[i]) flexMin[i] = raw;
+                if (raw > flexMax[i]) flexMax[i] = raw;
+            }
+        }
         flexSmoothed[i] = (raw * filterWeight) + (flexSmoothed[i] * (1.0 - filterWeight));
         
         flexPercent[i] = map((int)flexSmoothed[i], flexMin[i], flexMax[i], 0, 100);
@@ -90,6 +99,15 @@ inline void readMappedSensors(int* flexPercent, int& forcePercent) {
 inline void readAllSensors(int* flexRaw, int* flexPercent, int& forceRaw, int& forcePercent) {
     for (int i = 0; i < NUM_FINGERS; i++) {
         int raw = analogRead(flexPins[i]);
+        if (!isCalibrated) {
+            if (flexMin[i] > flexMax[i]) {
+                if (raw > flexMin[i]) flexMin[i] = raw;
+                if (raw < flexMax[i]) flexMax[i] = raw;
+            } else {
+                if (raw < flexMin[i]) flexMin[i] = raw;
+                if (raw > flexMax[i]) flexMax[i] = raw;
+            }
+        }
         flexSmoothed[i] = (raw * filterWeight) + (flexSmoothed[i] * (1.0 - filterWeight));
         
         flexRaw[i] = (int)flexSmoothed[i];

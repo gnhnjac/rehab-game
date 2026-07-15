@@ -361,14 +361,14 @@ void loop(void) {
       
       // Card is present. Poll it in a loop to detect when it leaves.
       int consecutiveFailures = 0;
-      while (consecutiveFailures < 5) {
+      while (consecutiveFailures < 12) {
         if (!isRegistered) {
           break; // Lost Glove connection while card is present
         }
 
-        // Wait 100ms non-blockingly while running animations
+        // Wait 50ms non-blockingly while running animations
         unsigned long startPoll = millis();
-        while (millis() - startPoll < 100) {
+        while (millis() - startPoll < 50) {
             updateLeds();
             checkHeartbeats();
             delay(10);
