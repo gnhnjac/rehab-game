@@ -209,7 +209,7 @@ class _PrescriptionEditScreenState extends State<PrescriptionEditScreen> {
                 ),
                 items: const [
                   DropdownMenuItem(value: 1, child: Text('Level 1: Fixed Target Box Color')),
-                  DropdownMenuItem(value: 2, child: Text('Level 2: Varying Color & Target Weight')),
+                  DropdownMenuItem(value: 2, child: Text('Level 2: Varying Color')),
                   DropdownMenuItem(value: 3, child: Text('Level 3: Shape & Color Match')),
                 ],
                 onChanged: (val) {
