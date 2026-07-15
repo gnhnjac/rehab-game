@@ -172,6 +172,21 @@ struct GameSessionState {
     // Countdown tracking flags
     bool played10sPrompt = false;
     bool played5sPrompt = false;
+
+    // Non-blocking animation states
+    bool waitingForNextTarget = false;
+    unsigned long nextTargetTime = 0;
+    uint8_t lastSuccessBoxMac[6] = {0};
+
+    bool failureEffectActive = false;
+    unsigned long failureEffectEndTime = 0;
+    uint8_t failureBoxMac[6] = {0};
+
+    // Deferred voice prompt schedule
+    bool pendingVoicePrompt = false;
+    unsigned long voicePromptTime = 0;
+    int pendingVoiceFolder = 0;
+    int pendingVoiceTrack = 0;
 };
 
 extern GameSessionState sessionState;

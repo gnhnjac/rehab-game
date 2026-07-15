@@ -71,7 +71,7 @@ inline void playCompletionSound() {
 }
 
 inline void playCubesBoxesSuccess() {
-    playTrack(4, 13);
+    playSuccessSound();
 }
 
 inline void playPinchSuccess() {

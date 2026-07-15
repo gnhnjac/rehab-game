@@ -495,6 +495,7 @@ inline void stopGameSession(bool completedSuccessfully) {
 // Handle local entered/left NFC events from the boxes in real-time
 inline void handleLocalNfcEvent(String cubeId, int boxIndex, bool isPlaced, const uint8_t *boxMac) {
     if (!sessionState.active) return;
+    if (sessionState.waitingForNextTarget || sessionState.failureEffectActive) return; // Ignore events during transitions
     
     Serial.printf("[Game-NFC] Event: Cube=%s, Box=%d, Placed=%s\n", 
                   cubeId.c_str(), boxIndex, isPlaced ? "TRUE" : "FALSE");
@@ -540,27 +541,19 @@ inline void handleLocalNfcEvent(String cubeId, int boxIndex, bool isPlaced, cons
                     sessionState.currentCycle++;
                     
                     playCubesBoxesSuccess();
-                    // Visual success: Turn correct box white for 1 second
-                    sendLedColorToBox(boxMac, 255, 255, 255);
-                    delay(1000);
-                    sendLedColorToBox(boxMac, 0, 0, 0);
-                    delay(500);
+                    sendLedColorToBox(boxMac, 255, 255, 255); // Visual success: White
                     
-                    if (sessionState.currentCycle >= currentPrescription.totalCycles) {
-                        stopGameSession(true);
-                    } else {
-                        selectNextCubesBoxesTarget();
-                    }
+                    sessionState.waitingForNextTarget = true;
+                    sessionState.nextTargetTime = millis() + 1000;
+                    memcpy(sessionState.lastSuccessBoxMac, boxMac, 6);
                 } else {
                     sessionState.failureCount++;
                     playFailureSound();
                     sendLedColorToBox(boxMac, 255, 0, 0); // Red on wrong box
-                    delay(1000);
-                    sendLedColorToBox(boxMac, 0, 0, 0); // Turn off wrong box
-                    delay(20);
-                    uint8_t r, g, b;
-                    colorToRgb(sessionState.targetCube.color, r, g, b);
-                    sendLedColorToBox(sessionState.targetBoxMac, r, g, b);
+                    
+                    sessionState.failureEffectActive = true;
+                    sessionState.failureEffectEndTime = millis() + 1000;
+                    memcpy(sessionState.failureBoxMac, boxMac, 6);
                 }
             }
             // Level 2: Varying color
@@ -574,27 +567,19 @@ inline void handleLocalNfcEvent(String cubeId, int boxIndex, bool isPlaced, cons
                     sessionState.currentCycle++;
                     
                     playCubesBoxesSuccess();
-                    // Visual success: Turn correct box white for 1 second
-                    sendLedColorToBox(boxMac, 255, 255, 255);
-                    delay(1000);
-                    sendLedColorToBox(boxMac, 0, 0, 0);
-                    delay(500);
+                    sendLedColorToBox(boxMac, 255, 255, 255); // Visual success: White
                     
-                    if (sessionState.currentCycle >= currentPrescription.totalCycles) {
-                        stopGameSession(true);
-                    } else {
-                        selectNextCubesBoxesTarget();
-                    }
+                    sessionState.waitingForNextTarget = true;
+                    sessionState.nextTargetTime = millis() + 1000;
+                    memcpy(sessionState.lastSuccessBoxMac, boxMac, 6);
                 } else {
                     sessionState.failureCount++;
                     playFailureSound();
                     sendLedColorToBox(boxMac, 255, 0, 0); // Red on wrong box
-                    delay(1000);
-                    sendLedColorToBox(boxMac, 0, 0, 0); // Turn off wrong box
-                    delay(20);
-                    uint8_t r, g, b;
-                    colorToRgb(sessionState.targetCube.color, r, g, b);
-                    sendLedColorToBox(sessionState.targetBoxMac, r, g, b);
+                    
+                    sessionState.failureEffectActive = true;
+                    sessionState.failureEffectEndTime = millis() + 1000;
+                    memcpy(sessionState.failureBoxMac, boxMac, 6);
                 }
             }
             // Level 3: Shape and Color matching
@@ -609,27 +594,19 @@ inline void handleLocalNfcEvent(String cubeId, int boxIndex, bool isPlaced, cons
                     sessionState.currentCycle++;
                     
                     playCubesBoxesSuccess();
-                    // Visual success: Turn correct box white for 1 second
-                    sendLedColorToBox(boxMac, 255, 255, 255);
-                    delay(1000);
-                    sendLedColorToBox(boxMac, 0, 0, 0);
-                    delay(500);
+                    sendLedColorToBox(boxMac, 255, 255, 255); // Visual success: White
                     
-                    if (sessionState.currentCycle >= currentPrescription.totalCycles) {
-                        stopGameSession(true);
-                    } else {
-                        selectNextCubesBoxesTarget();
-                    }
+                    sessionState.waitingForNextTarget = true;
+                    sessionState.nextTargetTime = millis() + 1000;
+                    memcpy(sessionState.lastSuccessBoxMac, boxMac, 6);
                 } else {
                     sessionState.failureCount++;
                     playFailureSound();
                     sendLedColorToBox(boxMac, 255, 0, 0); // Red on wrong box
-                    delay(1000);
-                    sendLedColorToBox(boxMac, 0, 0, 0); // Turn off wrong box
-                    delay(20);
-                    uint8_t r, g, b;
-                    colorToRgb(sessionState.targetCube.color, r, g, b);
-                    sendLedColorToBox(sessionState.targetBoxMac, r, g, b);
+                    
+                    sessionState.failureEffectActive = true;
+                    sessionState.failureEffectEndTime = millis() + 1000;
+                    memcpy(sessionState.failureBoxMac, boxMac, 6);
                 }
             }
         } else {
@@ -660,22 +637,10 @@ inline void handleLocalNfcEvent(String cubeId, int boxIndex, bool isPlaced, cons
                     
                     // Flash box white briefly to confirm placement
                     sendLedColorToBox(boxMac, 255, 255, 255);
-                    delay(500);
                     
-                    // Light box in target color 
-                    uint8_t r, g, b;
-                    colorToRgb(sessionState.targetCube.color, r, g, b);
-                    sendLedColorToBox(sessionState.targetBoxMac, r, g, b);
-                    
-                    // Voice: "Lift and hold for X seconds"
-                    int holdSec = currentPrescription.requiredHoldTimeSeconds;
-                    int trackNum = 5 + (holdSec / 5); // 5s→6, 10s→7, 15s→8, 20s→9, 25s→10, 30s→11
-                    if (trackNum < 6) trackNum = 6;
-                    if (trackNum > 11) trackNum = 11;
-                    playTrack(2, trackNum);
-                    Serial.printf("[Game-Pinch] Prompted: lift and hold for %d seconds (track 02/%03d).\n", holdSec, trackNum);
-                    
-                    triggerHapticClick();
+                    sessionState.waitingForNextTarget = true;
+                    sessionState.nextTargetTime = millis() + 500;
+                    memcpy(sessionState.lastSuccessBoxMac, boxMac, 6);
                 } else {
                     Serial.println("[Game-Pinch] Wrong cube placed.");
                     playFailureSound();
@@ -717,8 +682,11 @@ inline void handleLocalNfcEvent(String cubeId, int boxIndex, bool isPlaced, cons
                 int trackNum = 5 + (holdSec / 5);
                 if (trackNum < 6) trackNum = 6;
                 if (trackNum > 11) trackNum = 11;
-                delay(1500);
-                playTrack(2, trackNum);
+                
+                sessionState.pendingVoicePrompt = true;
+                sessionState.voicePromptTime = millis() + 1500;
+                sessionState.pendingVoiceFolder = 2;
+                sessionState.pendingVoiceTrack = trackNum;
             }
         }
     }
@@ -726,9 +694,56 @@ inline void handleLocalNfcEvent(String cubeId, int boxIndex, bool isPlaced, cons
 
 // Periodically run game loops (timers, FSR pressure thresholds, flex ROM sequences)
 inline void updateGame() {
-    if (!sessionState.active) return;
-    
     unsigned long now = millis();
+
+    // Deferred voice prompt schedule
+    if (sessionState.pendingVoicePrompt && now >= sessionState.voicePromptTime) {
+        sessionState.pendingVoicePrompt = false;
+        playTrack(sessionState.pendingVoiceFolder, sessionState.pendingVoiceTrack);
+    }
+
+    if (!sessionState.active) return;
+
+    // Non-blocking animation states
+    if (sessionState.waitingForNextTarget && now >= sessionState.nextTargetTime) {
+        sessionState.waitingForNextTarget = false;
+        
+        if (currentPrescription.gameType == GAME_CUBES_BOXES) {
+            sendLedColorToBox(sessionState.lastSuccessBoxMac, 0, 0, 0); // Turn off success white LED
+            if (sessionState.currentCycle >= currentPrescription.totalCycles) {
+                stopGameSession(true);
+            } else {
+                selectNextCubesBoxesTarget();
+            }
+        }
+        else if (currentPrescription.gameType == GAME_PINCH) {
+            // Restore box target color
+            uint8_t r, g, b;
+            colorToRgb(sessionState.targetCube.color, r, g, b);
+            sendLedColorToBox(sessionState.targetBoxMac, r, g, b);
+            
+            // Voice prompt: "Lift and hold for X seconds"
+            int holdSec = currentPrescription.requiredHoldTimeSeconds;
+            int trackNum = 5 + (holdSec / 5);
+            if (trackNum < 6) trackNum = 6;
+            if (trackNum > 11) trackNum = 11;
+            playTrack(2, trackNum);
+            
+            triggerHapticClick();
+        }
+    }
+
+    if (sessionState.failureEffectActive && now >= sessionState.failureEffectEndTime) {
+        sessionState.failureEffectActive = false;
+        sendLedColorToBox(sessionState.failureBoxMac, 0, 0, 0); // Turn off wrong box
+        
+        if (currentPrescription.gameType == GAME_CUBES_BOXES) {
+            // Restore target box LED color
+            uint8_t r, g, b;
+            colorToRgb(sessionState.targetCube.color, r, g, b);
+            sendLedColorToBox(sessionState.targetBoxMac, r, g, b);
+        }
+    }
 
     // Accumulate force metrics when holding/carrying a cube/block
     if (currentPrescription.gameType == GAME_CUBES_BOXES || currentPrescription.gameType == GAME_PINCH) {
@@ -789,13 +804,17 @@ inline void updateGame() {
                 } else {
                     // Next cycle: go back to Phase 0 (waiting for placement)
                     sessionState.currentStepInSequence = 0;
-                    delay(1500);
                     
-                    // Light box back up and prompt placement
+                    // Light box back up immediately
                     uint8_t r, g, b;
                     colorToRgb(sessionState.targetCube.color, r, g, b);
                     sendLedColorToBox(sessionState.targetBoxMac, r, g, b);
-                    playTrack(2, 5); // "Place the weight in the box"
+                    
+                    // Schedule prompt (2, 5) "Place weight in box" after 1500ms (so success chime finishes)
+                    sessionState.pendingVoicePrompt = true;
+                    sessionState.voicePromptTime = millis() + 1500;
+                    sessionState.pendingVoiceFolder = 2;
+                    sessionState.pendingVoiceTrack = 5;
                     Serial.println("[Game-Pinch] Phase 0: Waiting for next cube placement.");
                 }
             }
@@ -856,8 +875,12 @@ inline void updateGame() {
                     } else {
                         // Go back to Phase 0 (waiting for release)
                         sessionState.currentStepInSequence = 0;
-                        delay(2000); // Give time for success prompt to speak
-                        playReleasePrompt(); // "שחרר את האצבע" (04/008)
+                        
+                        // Schedule release prompt (04/008) after 2000ms (so success prompt finishes)
+                        sessionState.pendingVoicePrompt = true;
+                        sessionState.voicePromptTime = millis() + 2000;
+                        sessionState.pendingVoiceFolder = 4;
+                        sessionState.pendingVoiceTrack = 8;
                     }
                 }
             } else {
@@ -870,8 +893,12 @@ inline void updateGame() {
                 
                 // Go back to Phase 1 (waiting for bend)
                 sessionState.currentStepInSequence = 1;
-                delay(1500);
-                playTrack(3, 2); // Re-prompt bend
+                
+                // Schedule re-prompt bend (03/002) after 1500ms (so failure chime finishes)
+                sessionState.pendingVoicePrompt = true;
+                sessionState.voicePromptTime = millis() + 1500;
+                sessionState.pendingVoiceFolder = 3;
+                sessionState.pendingVoiceTrack = 2;
             }
         }
     }
