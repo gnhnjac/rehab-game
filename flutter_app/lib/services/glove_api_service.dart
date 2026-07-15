@@ -103,9 +103,21 @@ class GloveApiService {
     Map<String, dynamic>? calibration,
     List<GloveCube> cubes = const [],
   }) async {
+    int timerSeconds = 60;
+    if (prescription is CubesBoxesPrescription) {
+      timerSeconds = prescription.timerSeconds;
+    } else if (prescription is PinchPrescription) {
+      timerSeconds = prescription.cycles * prescription.holdDurationSeconds * 3;
+      if (timerSeconds < 120) timerSeconds = 120;
+    } else if (prescription is BendPrescription) {
+      timerSeconds = prescription.cycles * prescription.holdDurationSeconds * 3;
+      if (timerSeconds < 120) timerSeconds = 120;
+    }
+
     final query = <String, String>{
       'gameType': '${prescription.type.index + 1}',
       'cycles': '${prescription.cycles}',
+      'timer': '$timerSeconds',
     };
 
     if (calibration != null) {
@@ -123,7 +135,6 @@ class GloveApiService {
     switch (prescription) {
       case CubesBoxesPrescription p:
         query['difficulty'] = '${p.difficulty}';
-        query['timer'] = '${p.timerSeconds}';
         if (cubes.isNotEmpty) {
           query['cubes'] = cubes
               .map((c) => '${c.uid}:${c.color}:${c.shape}:${c.weightGrams}')

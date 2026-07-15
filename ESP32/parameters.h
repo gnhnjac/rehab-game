@@ -64,6 +64,14 @@ typedef enum {
     EVENT_BUTTON_PRESSED   // Main Box -> Glove: Physical button pressed
 } CubeEventType;
 
+typedef enum {
+    STOP_REASON_SUCCESS,
+    STOP_REASON_TIMEOUT,
+    STOP_REASON_ABORTED
+} SessionStopReason;
+
+
+
 
 typedef struct {
     uint8_t type;            // MsgType (uint8_t to ensure size consistency)
@@ -98,6 +106,10 @@ struct RegistryLock {
         }
     }
 };
+
+inline bool isMacZero(const uint8_t* mac) {
+    return mac[0] == 0 && mac[1] == 0 && mac[2] == 0 && mac[3] == 0 && mac[4] == 0 && mac[5] == 0;
+}
 
 // --- TELEMETRY SHARED DATA STRUCTURE ---
 typedef struct {

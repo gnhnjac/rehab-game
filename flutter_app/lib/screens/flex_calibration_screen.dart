@@ -41,6 +41,25 @@ class _FlexCalibrationScreenState extends State<FlexCalibrationScreen> {
     super.initState();
     TelemetryProvider.getService().disconnect(); // Stop background polling
     _online = true;
+
+    // Load existing calibration from active patient if available
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final activePatient = AppStateScope.of(context).activePatient;
+      if (activePatient != null) {
+        final cal = activePatient.calibration;
+        if (cal.containsKey('flex_min') && cal.containsKey('flex_max')) {
+          final fMinList = cal['flex_min'] as List?;
+          final fMaxList = cal['flex_max'] as List?;
+          if (fMinList != null && fMaxList != null && fMinList.length == 5 && fMaxList.length == 5) {
+            setState(() {
+              _capturedMin = List<int>.from(fMinList.map((e) => (e as num).toInt()));
+              _capturedMax = List<int>.from(fMaxList.map((e) => (e as num).toInt()));
+            });
+          }
+        }
+      }
+    });
+
     _startSlowPoll();
   }
 
@@ -77,8 +96,8 @@ class _FlexCalibrationScreenState extends State<FlexCalibrationScreen> {
         _online = true;
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Captured open hand baseline (Min limits)'),
+        SnackBar(
+          content: Text('Captured open hand baseline (Raw: $_capturedMin)'),
           backgroundColor: Colors.green,
         ),
       );
@@ -102,8 +121,8 @@ class _FlexCalibrationScreenState extends State<FlexCalibrationScreen> {
         _online = true;
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Captured closed hand baseline (Max limits)'),
+        SnackBar(
+          content: Text('Captured closed hand baseline (Raw: $_capturedMax)'),
           backgroundColor: Colors.green,
         ),
       );

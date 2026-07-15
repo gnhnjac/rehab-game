@@ -9,6 +9,7 @@
 extern int flexMin[NUM_FINGERS];
 extern int flexMax[NUM_FINGERS];
 extern bool isCalibrated;
+extern SessionStopReason lastSessionExitReason;
 
 
 
@@ -301,6 +302,8 @@ inline void selectNextCubesBoxesTarget() {
 inline void startNewGameSession() {
     if (currentPrescription.gameType == GAME_NONE) return;
 
+    loadCalibrationFromNVS();
+
     // Check if buffer is full (50 sessions) and offline (WiFi not connected)
     if (getBufferedLogCount() >= 50 && WiFi.status() != WL_CONNECTED) {
         Serial.println("[Game] Warning: Local log buffer is FULL (50 sessions) and offline. Circular buffer will overwrite oldest logs.");
@@ -316,6 +319,7 @@ inline void startNewGameSession() {
     sessionState.currentCycle = 0;
     sessionState.successCount = 0;
     lastSessionCompletedSuccess = false;
+    lastSessionExitReason = STOP_REASON_ABORTED;
     sessionState.failureCount = 0;
     sessionState.totalResponseTimeMs = 0;
     sessionState.lastActionTime = millis();
@@ -411,22 +415,28 @@ inline void startNewGameSession() {
             int trackNum = 5 + (holdSec / 5);
             if (trackNum < 6) trackNum = 6;
             if (trackNum > 11) trackNum = 11;
-            delay(3000); // Let start prompt finish
-            playTrack(2, trackNum);
+            
+            sessionState.pendingVoicePrompt = true;
+            sessionState.voicePromptTime = millis() + 3000;
+            sessionState.pendingVoiceFolder = 2;
+            sessionState.pendingVoiceTrack = trackNum;
         } else {
             // Voice: "Place the correct weight in the box"
-            delay(3000); // Let start prompt finish
-            playTrack(2, 5); // 02/005.mp3
+            sessionState.pendingVoicePrompt = true;
+            sessionState.voicePromptTime = millis() + 3000;
+            sessionState.pendingVoiceFolder = 2;
+            sessionState.pendingVoiceTrack = 5; // 02/005.mp3
             Serial.println("[Game-Pinch] Phase 0: Waiting for cube placement in box.");
         }
     }
 }
 
 // Stop game session helper
-inline void stopGameSession(bool completedSuccessfully) {
+inline void stopGameSession(SessionStopReason reason) {
     if (!sessionState.active) return;
     sessionState.active = false;
-    lastSessionCompletedSuccess = completedSuccessfully;
+    lastSessionCompletedSuccess = (reason == STOP_REASON_SUCCESS);
+    lastSessionExitReason = reason;
     
     Serial.println("[Game] Session finished.");
     
@@ -437,7 +447,7 @@ inline void stopGameSession(bool completedSuccessfully) {
     }
     
     // Play end prompt
-    if (completedSuccessfully) {
+    if (reason == STOP_REASON_SUCCESS) {
         if (currentPrescription.gameType == GAME_CUBES_BOXES) {
             playCubesBoxesSuccess();
             delay(1500);
@@ -456,8 +466,12 @@ inline void stopGameSession(bool completedSuccessfully) {
             playCompletionSound();
         }
         sendSuccessFlashToBoxes();
+    } else if (reason == STOP_REASON_TIMEOUT) {
+        playTimeoutSound(); // Speaks "תם הזמן!" (Time is up!)
+        sendFailureBlinkToBoxes();
     } else {
-        playTimeoutSound();
+        // STOP_REASON_ABORTED (aborted manually by user, play failure beep instead of "תם הזמן")
+        playFailureSound();
         sendFailureBlinkToBoxes();
     }
     
@@ -617,6 +631,13 @@ inline void handleLocalNfcEvent(String cubeId, int boxIndex, bool isPlaced, cons
         }
     }
     else if (currentPrescription.gameType == GAME_PINCH) {
+        if (isMacZero(sessionState.targetBoxMac)) {
+            memcpy(sessionState.targetBoxMac, boxMac, 6);
+            Serial.print("[Game-Pinch] Dynamic target box bind: ");
+            printMac_game(sessionState.targetBoxMac);
+            Serial.println();
+        }
+        
         if (memcmp(boxMac, sessionState.targetBoxMac, 6) != 0) return;
         
         // Phase 0: Waiting for cube placement
@@ -650,15 +671,26 @@ inline void handleLocalNfcEvent(String cubeId, int boxIndex, bool isPlaced, cons
         // Phase 1: Cube is in box, waiting for lift
         else if (sessionState.currentStepInSequence == 1) {
             if (!isPlaced) {
-                // Cube lifted — start hold timer (Phase 2)
-                Serial.println("[Game-Pinch] Cube lifted! Phase 2: Hold timer started.");
-                sessionState.currentStepInSequence = 2;
-                sessionState.isHolding = true;
-                sessionState.holdStartTime = millis();
+                int currentForceRaw = 0;
+                if (xSemaphoreTake(telemetryMutex, 0) == pdTRUE) {
+                    currentForceRaw = sharedTelemetry.forceRaw;
+                    xSemaphoreGive(telemetryMutex);
+                }
+                float forceGrams = getFsrForceGrams(currentForceRaw);
                 
-                // Turn off box LED while holding
-                sendLedColorToBox(sessionState.targetBoxMac, 0, 0, 0);
-                triggerHapticClick();
+                if (forceGrams >= 50.0f) {
+                    // Cube lifted — start hold timer (Phase 2)
+                    Serial.println("[Game-Pinch] Cube lifted! Phase 2: Hold timer started.");
+                    sessionState.currentStepInSequence = 2;
+                    sessionState.isHolding = true;
+                    sessionState.holdStartTime = millis();
+                    
+                    // Turn off box LED while holding
+                    sendLedColorToBox(sessionState.targetBoxMac, 0, 0, 0);
+                    triggerHapticClick();
+                } else {
+                    Serial.printf("[Game-Pinch] Cube left event ignored (FSR force is %.1fg, too low). Using FSR to debounce NFC drop.\n", forceGrams);
+                }
             }
         }
         // Phase 2: Cube is lifted, hold timer running
@@ -704,6 +736,69 @@ inline void updateGame() {
 
     if (!sessionState.active) return;
 
+    // Pinch game auto-advance from Phase 0 to Phase 1 if cube is already in the box
+    if (currentPrescription.gameType == GAME_PINCH && sessionState.currentStepInSequence == 0) {
+        bool cubeDetected = false;
+        {
+            RegistryLock lock;
+            for (const auto& pair : boxRegistry) {
+                const RegisteredBox& box = pair.second;
+                bool isTarget = false;
+                if (isMacZero(sessionState.targetBoxMac)) {
+                    isTarget = true; // Auto-bind first active box
+                } else {
+                    isTarget = (memcmp(box.mac, sessionState.targetBoxMac, 6) == 0);
+                }
+                
+                if (isTarget && box.current_cube_len > 0) {
+                    // Verify correct cube
+                    String rxTargetUid = "";
+                    for (int j = 0; j < sessionState.targetCube.uid_len; j++) {
+                        char hex[3];
+                        sprintf(hex, "%02X", sessionState.targetCube.uid[j]);
+                        rxTargetUid += hex;
+                    }
+                    
+                    String boxCubeUid = "";
+                    for (int j = 0; j < box.current_cube_len; j++) {
+                        char hex[3];
+                        sprintf(hex, "%02X", box.current_cube_uid[j]);
+                        boxCubeUid += hex;
+                    }
+                    
+                    if (rxTargetUid.length() == 0 || rxTargetUid == boxCubeUid) {
+                        if (isMacZero(sessionState.targetBoxMac)) {
+                            memcpy(sessionState.targetBoxMac, box.mac, 6);
+                        }
+                        cubeDetected = true;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        if (cubeDetected) {
+            Serial.println("[Game-Pinch] Target cube detected in box during updateGame. Auto-advancing to Phase 1.");
+            sessionState.currentStepInSequence = 1;
+            
+            // Light box in target color
+            uint8_t r, g, b;
+            colorToRgb(sessionState.targetCube.color, r, g, b);
+            sendLedColorToBox(sessionState.targetBoxMac, r, g, b);
+            
+            // Schedule the lift prompt
+            int holdSec = currentPrescription.requiredHoldTimeSeconds;
+            int trackNum = 5 + (holdSec / 5);
+            if (trackNum < 6) trackNum = 6;
+            if (trackNum > 11) trackNum = 11;
+            
+            sessionState.pendingVoicePrompt = true;
+            sessionState.voicePromptTime = millis() + 1000; // Play in 1s
+            sessionState.pendingVoiceFolder = 2;
+            sessionState.pendingVoiceTrack = trackNum;
+        }
+    }
+
     // Non-blocking animation states
     if (sessionState.waitingForNextTarget && now >= sessionState.nextTargetTime) {
         sessionState.waitingForNextTarget = false;
@@ -711,7 +806,7 @@ inline void updateGame() {
         if (currentPrescription.gameType == GAME_CUBES_BOXES) {
             sendLedColorToBox(sessionState.lastSuccessBoxMac, 0, 0, 0); // Turn off success white LED
             if (sessionState.currentCycle >= currentPrescription.totalCycles) {
-                stopGameSession(true);
+                stopGameSession(STOP_REASON_SUCCESS);
             } else {
                 selectNextCubesBoxesTarget();
             }
@@ -766,7 +861,7 @@ inline void updateGame() {
     // 1. Check timer expiration (only if timerSeconds is defined > 0)
     if (currentPrescription.timerSeconds > 0 && now >= sessionState.timerEndMillis) {
         Serial.println("[Game] Session timeout!");
-        stopGameSession(false); // Fail due to timeout
+        stopGameSession(STOP_REASON_TIMEOUT); // Fail due to timeout
         return;
     }
     
@@ -800,7 +895,7 @@ inline void updateGame() {
                 sendSuccessFlashToBoxes();
                 
                 if (sessionState.currentCycle >= currentPrescription.totalCycles) {
-                    stopGameSession(true);
+                    stopGameSession(STOP_REASON_SUCCESS);
                 } else {
                     // Next cycle: go back to Phase 0 (waiting for placement)
                     sessionState.currentStepInSequence = 0;
@@ -871,7 +966,7 @@ inline void updateGame() {
                     sessionState.currentCycle++;
                     
                     if (sessionState.currentCycle >= currentPrescription.totalCycles) {
-                        stopGameSession(true);
+                        stopGameSession(STOP_REASON_SUCCESS);
                     } else {
                         // Go back to Phase 0 (waiting for release)
                         sessionState.currentStepInSequence = 0;

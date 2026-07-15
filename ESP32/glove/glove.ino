@@ -48,6 +48,7 @@ bool isCalibrated = false;
 GamePrescription currentPrescription;
 GameSessionState sessionState;
 bool lastSessionCompletedSuccess = false;
+SessionStopReason lastSessionExitReason = STOP_REASON_ABORTED;
 
 // Piecewise linear force calibration coefficients (raw ADC -> grams)
 int fsrCalRaw[3] = {4095, 2000, 500};
@@ -144,7 +145,7 @@ void loop() {
         // Handle physical button toggle: start/stop the last game prescription
         if (sessionState.active) {
             Serial.println("[Button] Game session aborted by wireless button press.");
-            stopGameSession(false);
+            stopGameSession(STOP_REASON_ABORTED);
         } 
         else if (currentPrescription.gameType != GAME_NONE) {
             Serial.println("[Button] Starting game session by wireless button press.");

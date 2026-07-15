@@ -83,6 +83,7 @@ class GloveTelemetry {
   final int currentCycle;
   final int gameType;
   final bool sessionCompletedSuccess;
+  final String exitReason;
 
   GloveTelemetry({
     required this.calibrated,
@@ -98,6 +99,7 @@ class GloveTelemetry {
     this.currentCycle = 0,
     this.gameType = 0,
     this.sessionCompletedSuccess = false,
+    this.exitReason = 'aborted',
   });
 
   factory GloveTelemetry.fromJson(Map<String, dynamic> json) {
@@ -143,6 +145,7 @@ class GloveTelemetry {
       currentCycle: json['current_cycle'] ?? 0,
       gameType: json['game_type'] ?? 0,
       sessionCompletedSuccess: json['session_completed_success'] ?? false,
+      exitReason: json['exit_reason'] ?? 'aborted',
     );
   }
 
@@ -161,6 +164,7 @@ class GloveTelemetry {
       currentCycle: 0,
       gameType: 0,
       sessionCompletedSuccess: false,
+      exitReason: 'aborted',
     );
   }
 
@@ -178,5 +182,6 @@ class GloveTelemetry {
     'current_cycle': currentCycle,
     'game_type': gameType,
     'session_completed_success': sessionCompletedSuccess,
+    'exit_reason': exitReason,
   };
 }
