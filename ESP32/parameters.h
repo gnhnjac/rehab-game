@@ -79,6 +79,7 @@ struct RegisteredBox {
     uint8_t current_cube_len;
     bool active;
     unsigned long last_seen;
+    char shape[16];
 };
 
 // Box registry extern declaration (defined in glove.ino)
@@ -132,7 +133,6 @@ struct GamePrescription {
     int difficulty = 1;
     RxCube cubes[8];
     int cubesCount = 0;
-    int targetWeightGrams = 100;
     int requiredHoldTimeSeconds = 5;
     int activeFingers[NUM_FINGERS] = {0}; // 1 = active, 0 = inactive
     int requiredRom[NUM_FINGERS] = {0}; // target percentages

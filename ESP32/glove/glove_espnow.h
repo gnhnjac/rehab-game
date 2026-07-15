@@ -105,6 +105,7 @@ inline void OnDataRecv(const uint8_t * incoming_mac, const uint8_t *incomingData
             newBox.current_cube_len = 0;
             memset(newBox.current_cube_uid, 0, MAX_CUBE_UID_LEN);
             newBox.last_seen = millis();
+            strcpy(newBox.shape, "circle");
             boxRegistry[boxKey] = newBox;
         } else {
             it->second.last_seen = millis();
@@ -130,7 +131,7 @@ inline void OnDataRecv(const uint8_t * incoming_mac, const uint8_t *incomingData
                 newBox.current_cube_len = 0;
                 memset(newBox.current_cube_uid, 0, MAX_CUBE_UID_LEN);
                 newBox.last_seen = millis();
-                
+                strcpy(newBox.shape, "circle");
                 boxRegistry[boxKey] = newBox;
 
                 Serial.print("[Glove] Registered new Smart Box. Total connected: ");
@@ -213,7 +214,7 @@ inline void OnDataRecv(const uint8_t * incoming_mac, const uint8_t *incomingData
                 newBox.current_cube_len = 0;
                 memset(newBox.current_cube_uid, 0, MAX_CUBE_UID_LEN);
                 newBox.last_seen = millis();
-                
+                strcpy(newBox.shape, "circle");
                 boxRegistry[boxKey] = newBox;
 
                 // Add box as peer

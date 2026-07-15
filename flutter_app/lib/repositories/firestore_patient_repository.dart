@@ -19,7 +19,6 @@ class FirestorePatientRepository implements PatientRepository {
     prescriptionsMap[GameType.cubesBoxes] = CubesBoxesPrescription(
       cycles: (cb['cycles'] as num? ?? 3).toInt(),
       timerSeconds: (cb['timer'] as num? ?? 60).toInt(),
-      targetWeightGrams: (cb['targetWeightGrams'] as num? ?? 200.0).toDouble(),
       difficulty: (cb['difficulty'] as num? ?? 2).toInt(),
     );
 
@@ -28,7 +27,6 @@ class FirestorePatientRepository implements PatientRepository {
     prescriptionsMap[GameType.pinch] = PinchPrescription(
       cycles: (pinch['cycles'] as num? ?? 10).toInt(),
       holdDurationSeconds: (pinch['requiredHoldTimeSeconds'] as num? ?? 5).toInt(),
-      targetWeightGrams: (pinch['targetWeightGrams'] as num? ?? 100.0).toDouble(),
     );
 
     // 3. Bend
@@ -50,6 +48,8 @@ class FirestorePatientRepository implements PatientRepository {
       'fo_max': (calibration['fo_max'] as num? ?? 0).toInt(),
     };
 
+    final activeCubeUids = (data['activeCubeUids'] as List?)?.map((e) => e.toString()).toList() ?? <String>[];
+
     return Patient(
       id: doc.id,
       name: data['name'] as String? ?? 'Unnamed',
@@ -57,6 +57,7 @@ class FirestorePatientRepository implements PatientRepository {
       notes: data['notes'] as String?,
       prescriptions: prescriptionsMap,
       calibration: parsedCalibration,
+      activeCubeUids: activeCubeUids,
     );
   }
 
@@ -86,14 +87,13 @@ class FirestorePatientRepository implements PatientRepository {
         'fo_min': 4095,
         'fo_max': 0,
       },
+      'activeCubeUids': <String>[],
       'prescription': {
         'cubesBoxes': {
           'timer': 60,
           'cycles': 3,
-          'targetWeightGrams': 200,
         },
         'pinch': {
-          'targetWeightGrams': 500,
           'requiredHoldTimeSeconds': 5,
         },
         'bend': {
@@ -113,6 +113,7 @@ class FirestorePatientRepository implements PatientRepository {
       'name': patient.name,
       'age': patient.age,
       'notes': patient.notes,
+      'activeCubeUids': patient.activeCubeUids,
     });
     return patient;
   }
@@ -129,14 +130,12 @@ class FirestorePatientRepository implements PatientRepository {
       updateMap['prescription.cubesBoxes'] = {
         'cycles': prescription.cycles,
         'timer': prescription.timerSeconds,
-        'targetWeightGrams': prescription.targetWeightGrams,
         'difficulty': prescription.difficulty,
       };
     } else if (prescription is PinchPrescription) {
       updateMap['prescription.pinch'] = {
         'cycles': prescription.cycles,
         'requiredHoldTimeSeconds': prescription.holdDurationSeconds,
-        'targetWeightGrams': prescription.targetWeightGrams,
       };
     } else if (prescription is BendPrescription) {
       updateMap['prescription.bend'] = {

@@ -6,6 +6,7 @@ import '../models/patient.dart';
 import '../state/app_state_scope.dart';
 import '../widgets/patient_avatar.dart';
 import '../widgets/prescription_summary_card.dart';
+import '../services/cube_registry.dart';
 import 'analytics_screen.dart';
 import 'exercise_control_screen.dart';
 import 'patient_form_screen.dart';
@@ -173,6 +174,97 @@ class PatientDetailScreen extends StatelessWidget {
             ),
             icon: const Icon(Icons.insights_rounded),
             label: const Text('View progress & analytics'),
+          ),
+          const SizedBox(height: 24),
+          Card(
+            color: const Color(0xFF1E293B),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(color: Colors.white.withOpacity(0.05)),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.inventory_2_outlined, color: Color(0xFF8B5CF6)),
+                      SizedBox(width: 10),
+                      Text(
+                        'Active Cubes Configuration',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Select which cubes are active for this patient. Exercises will only pick target cubes from this selected list.',
+                    style: TextStyle(color: Colors.grey, fontSize: 12),
+                  ),
+                  const SizedBox(height: 12),
+                  if (CubeRegistry.registry.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 8.0),
+                      child: Text(
+                        'No cubes are enrolled in settings. Go to the dashboard settings to register cubes.',
+                        style: TextStyle(color: Colors.orangeAccent, fontSize: 13),
+                      ),
+                    )
+                  else
+                    ...CubeRegistry.registry.values.map((cube) {
+                      final isSelected = patient.activeCubeUids.isEmpty ||
+                          patient.activeCubeUids.contains(cube.uid);
+                      
+                      Color displayColor = Colors.white70;
+                      if (cube.colorHex.toLowerCase() == 'red') displayColor = Colors.redAccent;
+                      else if (cube.colorHex.toLowerCase() == 'green') displayColor = Colors.greenAccent;
+                      else if (cube.colorHex.toLowerCase() == 'blue') displayColor = Colors.blueAccent;
+                      else if (cube.colorHex.toLowerCase() == 'yellow') displayColor = Colors.yellowAccent;
+
+                      return CheckboxListTile(
+                        value: isSelected,
+                        activeColor: const Color(0xFF8B5CF6),
+                        checkColor: Colors.white,
+                        title: Text(cube.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500)),
+                        subtitle: Text(
+                          'Shape: ${cube.shape} · Color: ${cube.colorHex} · Weight: ${cube.weightGrams}g',
+                          style: const TextStyle(color: Colors.grey, fontSize: 12),
+                        ),
+                        secondary: Icon(Icons.crop_square_rounded, color: displayColor),
+                        onChanged: (checked) {
+                          if (checked == null) return;
+                          final currentActive = patient.activeCubeUids.isEmpty
+                              ? CubeRegistry.registry.keys.toList()
+                              : List<String>.from(patient.activeCubeUids);
+
+                          if (checked) {
+                            if (!currentActive.contains(cube.uid)) {
+                              currentActive.add(cube.uid);
+                            }
+                          } else {
+                            if (currentActive.length <= 1) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('At least one active cube must be selected for the patient.'),
+                                  backgroundColor: Colors.orangeAccent,
+                                ),
+                              );
+                              return;
+                            }
+                            currentActive.remove(cube.uid);
+                          }
+                          appState.updatePatientActiveCubes(patient.id, currentActive);
+                        },
+                      );
+                    }).toList(),
+                ],
+              ),
+            ),
           ),
           const SizedBox(height: 24),
           const Text(

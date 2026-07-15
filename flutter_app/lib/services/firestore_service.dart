@@ -45,7 +45,6 @@ class FirestoreService {
           'difficulty': 2,
         },
         'pinch': {
-          'targetWeightGrams': 100,
           'requiredHoldTimeSeconds': 5,
           'activeFingers': [1, 2],
         },

@@ -24,6 +24,7 @@ class MockPatientRepository implements PatientRepository {
       notes: notes,
       prescriptions: _defaultPrescriptions(),
       calibration: _defaultCalibration(),
+      activeCubeUids: const <String>[],
     );
   }
 
@@ -32,12 +33,10 @@ class MockPatientRepository implements PatientRepository {
       GameType.cubesBoxes: const CubesBoxesPrescription(
         cycles: 3,
         timerSeconds: 60,
-        targetWeightGrams: 200,
       ),
       GameType.pinch: const PinchPrescription(
         cycles: 10,
         holdDurationSeconds: 5,
-        targetWeightGrams: 100,
       ),
       GameType.bend: const BendPrescription(
         cycles: 10,
@@ -76,6 +75,7 @@ class MockPatientRepository implements PatientRepository {
       notes: notes,
       prescriptions: _defaultPrescriptions(),
       calibration: _defaultCalibration(),
+      activeCubeUids: const <String>[],
     );
     _patients[id] = patient;
     return patient;

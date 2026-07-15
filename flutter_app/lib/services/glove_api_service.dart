@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../models/game_prescription.dart';
+import 'box_registry.dart';
 import 'direct_telemetry_service.dart';
 import 'telemetry_provider.dart';
 
@@ -123,7 +124,6 @@ class GloveApiService {
       case CubesBoxesPrescription p:
         query['difficulty'] = '${p.difficulty}';
         query['timer'] = '${p.timerSeconds}';
-        query['targetWeight'] = '${p.targetWeightGrams.round()}';
         if (cubes.isNotEmpty) {
           query['cubes'] = cubes
               .map((c) => '${c.uid}:${c.color}:${c.shape}:${c.weightGrams}')
@@ -131,7 +131,6 @@ class GloveApiService {
         }
       case PinchPrescription p:
         query['holdTime'] = '${p.holdDurationSeconds}';
-        query['targetWeight'] = '${p.targetWeightGrams.round()}';
       case BendPrescription p:
         query['holdTime'] = '${p.holdDurationSeconds}';
         // Broadcast the ROM target across all 5 fingers.
@@ -142,6 +141,13 @@ class GloveApiService {
 
     if (patientId != null && patientId.isNotEmpty) {
       query['patientId'] = patientId;
+    }
+
+    final enrolledBoxes = BoxRegistry.registry.values.toList();
+    if (enrolledBoxes.isNotEmpty) {
+      query['boxes'] = enrolledBoxes
+          .map((b) => '${b.mac.replaceAll(':', '').toUpperCase()}:${b.shape}')
+          .join(',');
     }
 
     final response = await _httpClient

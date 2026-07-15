@@ -23,7 +23,6 @@ inline void savePrescriptionToNVS(const GamePrescription& rx) {
     prefs.putInt("timer", rx.timerSeconds);
     prefs.putInt("cycles", rx.totalCycles);
     prefs.putInt("difficulty", rx.difficulty);
-    prefs.putInt("tgtWeight", rx.targetWeightGrams);
     prefs.putInt("holdTime", rx.requiredHoldTimeSeconds);
     
     // Save active fingers
@@ -85,7 +84,6 @@ inline bool loadPrescriptionFromNVS(GamePrescription& rx) {
     rx.timerSeconds = prefs.getInt("timer", 60);
     rx.totalCycles = prefs.getInt("cycles", 3);
     rx.difficulty = prefs.getInt("difficulty", 1);
-    rx.targetWeightGrams = prefs.getInt("tgtWeight", 100);
     rx.requiredHoldTimeSeconds = prefs.getInt("holdTime", 5);
     
     // Load active fingers
@@ -206,12 +204,29 @@ inline void selectNextCubesBoxesTarget() {
         // Pick random cube
         RxCube candidateCube;
         if (currentPrescription.cubesCount > 0) {
-            randCubeIdx = random(0, currentPrescription.cubesCount);
-            candidateCube = currentPrescription.cubes[randCubeIdx];
+            if (currentPrescription.difficulty == 3) {
+                RxCube matchingCubes[8];
+                int matchingCount = 0;
+                for (int c = 0; c < currentPrescription.cubesCount; c++) {
+                    if (strcasecmp(currentPrescription.cubes[c].shape, it->second.shape) == 0) {
+                        matchingCubes[matchingCount++] = currentPrescription.cubes[c];
+                    }
+                }
+                if (matchingCount > 0) {
+                    int randIdx = random(0, matchingCount);
+                    candidateCube = matchingCubes[randIdx];
+                } else {
+                    randCubeIdx = random(0, currentPrescription.cubesCount);
+                    candidateCube = currentPrescription.cubes[randCubeIdx];
+                }
+            } else {
+                randCubeIdx = random(0, currentPrescription.cubesCount);
+                candidateCube = currentPrescription.cubes[randCubeIdx];
+            }
         } else {
             strcpy(candidateCube.color, "Red");
-            strcpy(candidateCube.shape, "Circle");
-            candidateCube.weightGrams = 100;
+            strncpy(candidateCube.shape, it->second.shape, sizeof(candidateCube.shape) - 1);
+            candidateCube.shape[sizeof(candidateCube.shape) - 1] = '\0';
             candidateCube.uid_len = 0;
         }
         
@@ -230,11 +245,22 @@ inline void selectNextCubesBoxesTarget() {
         it = boxRegistry.begin();
         memcpy(sessionState.targetBoxMac, it->second.mac, 6);
         if (currentPrescription.cubesCount > 0) {
-            sessionState.targetCube = currentPrescription.cubes[0];
+            if (currentPrescription.difficulty == 3) {
+                RxCube fallbackCube = currentPrescription.cubes[0];
+                for (int c = 0; c < currentPrescription.cubesCount; c++) {
+                    if (strcasecmp(currentPrescription.cubes[c].shape, it->second.shape) == 0) {
+                        fallbackCube = currentPrescription.cubes[c];
+                        break;
+                    }
+                }
+                sessionState.targetCube = fallbackCube;
+            } else {
+                sessionState.targetCube = currentPrescription.cubes[0];
+            }
         } else {
             strcpy(sessionState.targetCube.color, "Red");
-            strcpy(sessionState.targetCube.shape, "Circle");
-            sessionState.targetCube.weightGrams = 100;
+            strncpy(sessionState.targetCube.shape, it->second.shape, sizeof(sessionState.targetCube.shape) - 1);
+            sessionState.targetCube.shape[sizeof(sessionState.targetCube.shape) - 1] = '\0';
             sessionState.targetCube.uid_len = 0;
         }
     }
@@ -446,7 +472,7 @@ inline void stopGameSession(bool completedSuccessfully) {
         if (sessionState.countSteadyForce > 0) {
             avgForceOrRom = sessionState.sumSteadyForce / sessionState.countSteadyForce;
         } else {
-            avgForceOrRom = currentPrescription.targetWeightGrams; // Fallback
+            avgForceOrRom = 0; // Fallback
         }
     } else if (currentPrescription.gameType == GAME_CUBES_BOXES) {
         if (sessionState.countSteadyForce > 0) {
@@ -476,6 +502,16 @@ inline void handleLocalNfcEvent(String cubeId, int boxIndex, bool isPlaced, cons
     if (currentPrescription.gameType == GAME_CUBES_BOXES) {
         if (isPlaced) {
             sessionState.isHolding = false;
+            
+            uint64_t boxKey = macToKey_game(boxMac);
+            RegisteredBox box;
+            bool foundBox = false;
+            auto bit = boxRegistry.find(boxKey);
+            if (bit != boxRegistry.end()) {
+                box = bit->second;
+                foundBox = true;
+            }
+
             // Match the cube details
             RxCube insertedCube;
             bool foundCube = false;
@@ -527,12 +563,11 @@ inline void handleLocalNfcEvent(String cubeId, int boxIndex, bool isPlaced, cons
                     sendLedColorToBox(sessionState.targetBoxMac, r, g, b);
                 }
             }
-            // Level 2: Varying color and weights
+            // Level 2: Varying color
             else if (currentPrescription.difficulty == 2) {
-                // Must match targetBox AND targetCube (UID or properties)
+                // Must match targetBox AND targetCube color
                 if (memcmp(boxMac, sessionState.targetBoxMac, 6) == 0 && foundCube &&
-                    String(insertedCube.color) == String(sessionState.targetCube.color) &&
-                    insertedCube.weightGrams == sessionState.targetCube.weightGrams) {
+                    strcasecmp(insertedCube.color, sessionState.targetCube.color) == 0) {
                     
                     sessionState.successCount++;
                     sessionState.totalResponseTimeMs += (millis() - sessionState.lastActionTime);
@@ -564,11 +599,10 @@ inline void handleLocalNfcEvent(String cubeId, int boxIndex, bool isPlaced, cons
             }
             // Level 3: Shape and Color matching
             else if (currentPrescription.difficulty == 3) {
-                // Box has a shape cutout. Cube shape must match Box shape AND cube color must match LED.
-                // In this simplified logic, the targetBoxMac represents the correct shape slot.
-                if (memcmp(boxMac, sessionState.targetBoxMac, 6) == 0 && foundCube &&
-                    String(insertedCube.shape) == String(sessionState.targetCube.shape) &&
-                    String(insertedCube.color) == String(sessionState.targetCube.color)) {
+                // Box has a shape cutout. Cube shape must match Box shape AND cube color must match target color.
+                if (memcmp(boxMac, sessionState.targetBoxMac, 6) == 0 && foundCube && foundBox &&
+                    strcasecmp(insertedCube.shape, box.shape) == 0 &&
+                    strcasecmp(insertedCube.color, sessionState.targetCube.color) == 0) {
                     
                     sessionState.successCount++;
                     sessionState.totalResponseTimeMs += (millis() - sessionState.lastActionTime);
@@ -698,16 +732,17 @@ inline void updateGame() {
 
     // Accumulate force metrics when holding/carrying a cube/block
     if (currentPrescription.gameType == GAME_CUBES_BOXES || currentPrescription.gameType == GAME_PINCH) {
+        int currentForceRaw = 0;
+        if (xSemaphoreTake(telemetryMutex, 0) == pdTRUE) {
+            currentForceRaw = sharedTelemetry.forceRaw;
+            xSemaphoreGive(telemetryMutex);
+        }
+        float forceGrams = getFsrForceGrams(currentForceRaw);
+        
         bool isPinchHold = (currentPrescription.gameType == GAME_PINCH && sessionState.currentStepInSequence == 2 && sessionState.isHolding);
-        bool isCubesCarry = (currentPrescription.gameType == GAME_CUBES_BOXES && sessionState.isHolding);
+        bool isCubesCarry = (currentPrescription.gameType == GAME_CUBES_BOXES && (sessionState.isHolding || forceGrams >= 100.0));
         
         if (isPinchHold || isCubesCarry) {
-            int currentForceRaw = 0;
-            if (xSemaphoreTake(telemetryMutex, 0) == pdTRUE) {
-                currentForceRaw = sharedTelemetry.forceRaw;
-                xSemaphoreGive(telemetryMutex);
-            }
-            float forceGrams = getFsrForceGrams(currentForceRaw);
             sessionState.sumSteadyForce += forceGrams;
             sessionState.countSteadyForce++;
         }

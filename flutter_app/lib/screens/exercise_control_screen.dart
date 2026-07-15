@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../models/game_prescription.dart';
 import '../models/glove_telemetry.dart';
 import '../state/app_state_scope.dart';
+import '../services/box_registry.dart';
 import '../services/cube_registry.dart';
 import '../services/glove_api_service.dart';
 import '../services/telemetry_provider.dart';
@@ -87,12 +88,73 @@ class _ExerciseControlScreenState extends State<ExerciseControlScreen> {
     }
   }
 
+  void _showValidationErrorDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF141722),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orangeAccent),
+            SizedBox(width: 10),
+            Text('Validation Error', style: TextStyle(color: Colors.white)),
+          ],
+        ),
+        content: Text(message, style: const TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK', style: TextStyle(color: Colors.blue)),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _startExercise() async {
     setState(() => _starting = true);
     try {
       List<GloveCube> cubes = const [];
+      final activePatient = AppStateScope.of(context).activePatient;
+      final patientActiveCubeUids = activePatient?.activeCubeUids ?? <String>[];
+
       if (widget.prescription.type == GameType.cubesBoxes) {
+        if (widget.prescription is CubesBoxesPrescription &&
+            (widget.prescription as CubesBoxesPrescription).difficulty == 3) {
+          final enrolledBoxes = BoxRegistry.registry.values.toList();
+          var enrolledCubes = CubeRegistry.registry.values.toList();
+          if (patientActiveCubeUids.isNotEmpty) {
+            enrolledCubes = enrolledCubes.where((c) => patientActiveCubeUids.contains(c.uid)).toList();
+          }
+          
+          if (enrolledBoxes.isEmpty) {
+            _showValidationErrorDialog("No boxes are enrolled in the box registry. Please enroll boxes first.");
+            setState(() => _starting = false);
+            return;
+          }
+
+          List<String> missingShapes = [];
+          for (final box in enrolledBoxes) {
+            final hasMatchingCube = enrolledCubes.any((cube) =>
+                cube.shape.trim().toLowerCase() == box.shape.trim().toLowerCase());
+            if (!hasMatchingCube) {
+              missingShapes.add(box.shape);
+            }
+          }
+
+          if (missingShapes.isNotEmpty) {
+            _showValidationErrorDialog(
+              "Physically impossible matching:\nThe box registry contains boxes with shapes (${missingShapes.toSet().join(', ')}) "
+              "but there are no corresponding active cubes with those shapes assigned to this patient.\n\n"
+              "Please activate matching cubes in the patient profile first."
+            );
+            setState(() => _starting = false);
+            return;
+          }
+        }
+
         cubes = CubeRegistry.registry.values
+            .where((c) => patientActiveCubeUids.isEmpty || patientActiveCubeUids.contains(c.uid))
             .map((c) => GloveCube(
                   uid: c.uid,
                   color: c.colorHex,
@@ -101,7 +163,6 @@ class _ExerciseControlScreenState extends State<ExerciseControlScreen> {
                 ))
             .toList();
       }
-      final activePatient = AppStateScope.of(context).activePatient;
       await _api.sendActivePrescription(
         prescription: widget.prescription,
         patientId: widget.patientId,

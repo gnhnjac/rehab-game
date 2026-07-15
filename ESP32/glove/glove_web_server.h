@@ -504,7 +504,52 @@ inline void handleActivePrescription() {
         }
     }
     
-    rx.targetWeightGrams = server.arg("targetWeight").toInt();
+    String boxesParam = server.arg("boxes");
+    if (boxesParam.length() > 0) {
+        RegistryLock lock;
+        int start = 0;
+        for (int i = 0; i <= boxesParam.length(); i++) {
+            if (i == boxesParam.length() || boxesParam.charAt(i) == ',') {
+                String boxMapping = boxesParam.substring(start, i);
+                start = i + 1;
+                
+                int colonIdx = boxMapping.indexOf(':');
+                if (colonIdx != -1) {
+                    String macStr = boxMapping.substring(0, colonIdx);
+                    String shapeStr = boxMapping.substring(colonIdx + 1);
+                    
+                    uint8_t macBytes[6] = {0};
+                    for (int k = 0; k < 6 && k * 2 + 2 <= macStr.length(); k++) {
+                        String byteHex = macStr.substring(k * 2, k * 2 + 2);
+                        macBytes[k] = (uint8_t)strtol(byteHex.c_str(), NULL, 16);
+                    }
+                    uint64_t key = 0;
+                    for (int k = 0; k < 6; k++) {
+                        key = (key << 8) | macBytes[k];
+                    }
+                    
+                    auto it = boxRegistry.find(key);
+                    if (it != boxRegistry.end()) {
+                        strncpy(it->second.shape, shapeStr.c_str(), sizeof(it->second.shape) - 1);
+                        it->second.shape[sizeof(it->second.shape) - 1] = '\0';
+                        Serial.printf("[Game] Configured Box %s with shape: %s\n", macStr.c_str(), shapeStr.c_str());
+                    } else {
+                        RegisteredBox newBox;
+                        memcpy(newBox.mac, macBytes, 6);
+                        newBox.active = false;
+                        newBox.current_cube_len = 0;
+                        memset(newBox.current_cube_uid, 0, MAX_CUBE_UID_LEN);
+                        newBox.last_seen = 0;
+                        strncpy(newBox.shape, shapeStr.c_str(), sizeof(newBox.shape) - 1);
+                        newBox.shape[sizeof(newBox.shape) - 1] = '\0';
+                        boxRegistry[key] = newBox;
+                        Serial.printf("[Game] Pre-registered Box %s with shape: %s\n", macStr.c_str(), shapeStr.c_str());
+                    }
+                }
+            }
+        }
+    }
+
     rx.requiredHoldTimeSeconds = server.arg("holdTime").toInt();
     
     String fingersStr = server.arg("activeFingers");
@@ -566,8 +611,8 @@ inline void handleActivePrescription() {
 
     currentPrescription = rx;
     savePrescriptionToNVS(rx); // Persist received prescription!
-    Serial.printf("[Rx] Received prescription: type=%d, cycles=%d, timer=%d, diff=%d, targetWeight=%d, holdTime=%d\n",
-                  rx.gameType, rx.totalCycles, rx.timerSeconds, rx.difficulty, rx.targetWeightGrams, rx.requiredHoldTimeSeconds);
+    Serial.printf("[Rx] Received prescription: type=%d, cycles=%d, timer=%d, diff=%d, holdTime=%d\n",
+                  rx.gameType, rx.totalCycles, rx.timerSeconds, rx.difficulty, rx.requiredHoldTimeSeconds);
     
     // Save to NVS persistently
     savePrescriptionToNVS(rx);

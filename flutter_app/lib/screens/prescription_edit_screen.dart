@@ -40,13 +40,11 @@ class _PrescriptionEditScreenState extends State<PrescriptionEditScreen> {
     switch (p) {
       case CubesBoxesPrescription cb:
         _timerOrHoldController = TextEditingController(text: cb.timerSeconds.toString());
-        _targetController =
-            TextEditingController(text: cb.targetWeightGrams.toStringAsFixed(0));
+        _targetController = TextEditingController();
       case PinchPrescription pinch:
         _timerOrHoldController =
             TextEditingController(text: pinch.holdDurationSeconds.toString());
-        _targetController =
-            TextEditingController(text: pinch.targetWeightGrams.toStringAsFixed(0));
+        _targetController = TextEditingController();
       case BendPrescription bend:
         _timerOrHoldController =
             TextEditingController(text: bend.holdDurationSeconds.toString());
@@ -97,14 +95,12 @@ class _PrescriptionEditScreenState extends State<PrescriptionEditScreen> {
         updated = cb.copyWith(
           cycles: cycles,
           timerSeconds: int.parse(_timerOrHoldController.text.trim()),
-          targetWeightGrams: double.parse(_targetController.text.trim()),
           difficulty: _selectedDifficulty,
         );
       case PinchPrescription pinch:
         updated = pinch.copyWith(
           cycles: cycles,
           holdDurationSeconds: int.parse(_timerOrHoldController.text.trim()),
-          targetWeightGrams: double.parse(_targetController.text.trim()),
         );
       case BendPrescription bend:
         updated = bend.copyWith(
@@ -125,21 +121,14 @@ class _PrescriptionEditScreenState extends State<PrescriptionEditScreen> {
   Widget build(BuildContext context) {
     final p = widget.prescription;
     final String timerOrHoldLabel;
-    final String targetLabel;
-    final String? Function(String?) targetValidator;
+    final bool showTargetField = p is BendPrescription;
     switch (p) {
       case CubesBoxesPrescription _:
         timerOrHoldLabel = 'Timer (seconds)';
-        targetLabel = 'Target weight (grams)';
-        targetValidator = _validatePositiveDouble;
       case PinchPrescription _:
         timerOrHoldLabel = 'Hold duration (seconds)';
-        targetLabel = 'Target weight (grams)';
-        targetValidator = _validatePositiveDouble;
       case BendPrescription _:
         timerOrHoldLabel = 'Hold duration (seconds)';
-        targetLabel = 'Target ROM (%)';
-        targetValidator = _validateRomPercent;
     }
 
     final color = gameTypeColor(p.type);
@@ -201,13 +190,15 @@ class _PrescriptionEditScreenState extends State<PrescriptionEditScreen> {
               keyboardType: TextInputType.number,
               validator: _validatePositiveInt,
             ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _targetController,
-              decoration: InputDecoration(labelText: targetLabel),
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              validator: targetValidator,
-            ),
+            if (showTargetField) ...[
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _targetController,
+                decoration: const InputDecoration(labelText: 'Target ROM (%)'),
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                validator: _validateRomPercent,
+              ),
+            ],
             if (p is CubesBoxesPrescription) ...[
               const SizedBox(height: 16),
               DropdownButtonFormField<int>(

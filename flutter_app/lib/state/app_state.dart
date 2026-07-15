@@ -60,6 +60,16 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  Future<void> updatePatientActiveCubes(String patientId, List<String> activeCubeUids) async {
+    final idx = _patients.indexWhere((p) => p.id == patientId);
+    if (idx != -1) {
+      final updatedPatient = _patients[idx].copyWith(activeCubeUids: activeCubeUids);
+      _patients[idx] = updatedPatient;
+      notifyListeners();
+      await repository.updatePatient(updatedPatient);
+    }
+  }
+
   Future<void> setActivePatient(String patientId) async {
     _activePatientId = patientId;
     notifyListeners();

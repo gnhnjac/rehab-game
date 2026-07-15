@@ -25,26 +25,22 @@ sealed class GamePrescription {
 
 final class CubesBoxesPrescription extends GamePrescription {
   final int timerSeconds;
-  final double targetWeightGrams;
   final int difficulty;
 
   const CubesBoxesPrescription({
     required super.cycles,
     required this.timerSeconds,
-    required this.targetWeightGrams,
     this.difficulty = 2,
   }) : super(type: GameType.cubesBoxes);
 
   CubesBoxesPrescription copyWith({
     int? cycles,
     int? timerSeconds,
-    double? targetWeightGrams,
     int? difficulty,
   }) {
     return CubesBoxesPrescription(
       cycles: cycles ?? this.cycles,
       timerSeconds: timerSeconds ?? this.timerSeconds,
-      targetWeightGrams: targetWeightGrams ?? this.targetWeightGrams,
       difficulty: difficulty ?? this.difficulty,
     );
   }
@@ -53,7 +49,6 @@ final class CubesBoxesPrescription extends GamePrescription {
     return CubesBoxesPrescription(
       cycles: json['cycles'] as int,
       timerSeconds: json['timerSeconds'] as int,
-      targetWeightGrams: (json['targetWeightGrams'] as num).toDouble(),
       difficulty: json['difficulty'] as int? ?? 2,
     );
   }
@@ -63,30 +58,25 @@ final class CubesBoxesPrescription extends GamePrescription {
         'type': 'cubesBoxes',
         'cycles': cycles,
         'timerSeconds': timerSeconds,
-        'targetWeightGrams': targetWeightGrams,
         'difficulty': difficulty,
       };
 }
 
 final class PinchPrescription extends GamePrescription {
   final int holdDurationSeconds;
-  final double targetWeightGrams;
 
   const PinchPrescription({
     required super.cycles,
     required this.holdDurationSeconds,
-    required this.targetWeightGrams,
   }) : super(type: GameType.pinch);
 
   PinchPrescription copyWith({
     int? cycles,
     int? holdDurationSeconds,
-    double? targetWeightGrams,
   }) {
     return PinchPrescription(
       cycles: cycles ?? this.cycles,
       holdDurationSeconds: holdDurationSeconds ?? this.holdDurationSeconds,
-      targetWeightGrams: targetWeightGrams ?? this.targetWeightGrams,
     );
   }
 
@@ -94,9 +84,6 @@ final class PinchPrescription extends GamePrescription {
     return PinchPrescription(
       cycles: json['cycles'] as int,
       holdDurationSeconds: json['holdDurationSeconds'] as int,
-      targetWeightGrams: (json['targetWeightGrams'] as num?)?.toDouble() ??
-          (json['targetForceGrams'] as num?)?.toDouble() ??
-          100.0,
     );
   }
 
@@ -105,7 +92,6 @@ final class PinchPrescription extends GamePrescription {
         'type': 'pinch',
         'cycles': cycles,
         'holdDurationSeconds': holdDurationSeconds,
-        'targetWeightGrams': targetWeightGrams,
       };
 }
 
