@@ -398,7 +398,6 @@ inline void startNewGameSession() {
                 }
             }
         }
-        
         if (alreadyPlaced) {
             Serial.println("[Game-Pinch] Target cube is already placed. Advancing to Phase 1 immediately.");
             sessionState.currentStepInSequence = 1;
@@ -428,6 +427,13 @@ inline void startNewGameSession() {
             sessionState.pendingVoiceTrack = 5; // 02/005.mp3
             Serial.println("[Game-Pinch] Phase 0: Waiting for cube placement in box.");
         }
+    } else if (currentPrescription.gameType == GAME_BEND) {
+        // Schedule release/straighten prompt (4, 8) after 3000ms (so start prompt finishes)
+        sessionState.pendingVoicePrompt = true;
+        sessionState.voicePromptTime = millis() + 3000;
+        sessionState.pendingVoiceFolder = 4;
+        sessionState.pendingVoiceTrack = 8;
+        Serial.println("[Game-Bend] Starting Bend game. Phase 0: Waiting for straight hand.");
     }
 }
 
@@ -799,6 +805,46 @@ inline void updateGame() {
         }
     }
 
+    // Continuous check for Pinch Grip lift transition (Phase 1 -> Phase 2)
+    if (currentPrescription.gameType == GAME_PINCH && sessionState.currentStepInSequence == 1) {
+        bool cubeNotInBox = false;
+        if (!isMacZero(sessionState.targetBoxMac)) {
+            uint64_t key = 0;
+            for (int k = 0; k < 6; k++) {
+                key = (key << 8) | sessionState.targetBoxMac[k];
+            }
+            RegistryLock lock;
+            auto it = boxRegistry.find(key);
+            if (it != boxRegistry.end()) {
+                if (it->second.current_cube_len == 0) {
+                    cubeNotInBox = true;
+                }
+            } else {
+                cubeNotInBox = true;
+            }
+        } else {
+            cubeNotInBox = true;
+        }
+
+        if (cubeNotInBox) {
+            int currentForceRaw = 0;
+            if (xSemaphoreTake(telemetryMutex, 0) == pdTRUE) {
+                currentForceRaw = sharedTelemetry.forceRaw;
+                xSemaphoreGive(telemetryMutex);
+            }
+            float forceGrams = getFsrForceGrams(currentForceRaw);
+            if (forceGrams >= 50.0f) {
+                Serial.printf("[Game-Pinch] Continuous FSR check detected lift (Force: %.1fg). Phase 2: Start hold.\n", forceGrams);
+                sessionState.currentStepInSequence = 2;
+                sessionState.isHolding = true;
+                sessionState.holdStartTime = millis();
+                
+                sendLedColorToBox(sessionState.targetBoxMac, 0, 0, 0);
+                triggerHapticClick();
+            }
+        }
+    }
+
     // Non-blocking animation states
     if (sessionState.waitingForNextTarget && now >= sessionState.nextTargetTime) {
         sessionState.waitingForNextTarget = false;
@@ -916,30 +962,43 @@ inline void updateGame() {
         }
     }
     else if (currentPrescription.gameType == GAME_BEND) {
-        int maxFlexPct = 0;
-        if (xSemaphoreTake(telemetryMutex, 0) == pdTRUE) {
+        int activeFingerIdx = 0; // Default to Thumb (0)
+        if (currentPrescription.sequenceCount > 0) {
+            int fingerVal = currentPrescription.sequence[sessionState.currentCycle % currentPrescription.sequenceCount];
+            if (fingerVal >= 1 && fingerVal <= 5) {
+                activeFingerIdx = fingerVal - 1;
+            }
+        } else {
+            // Find first active finger from activeFingers array
             for (int i = 0; i < NUM_FINGERS; i++) {
-                if (sharedTelemetry.flexPercent[i] > maxFlexPct) {
-                    maxFlexPct = sharedTelemetry.flexPercent[i];
+                if (currentPrescription.activeFingers[i] == 1) {
+                    activeFingerIdx = i;
+                    break;
                 }
             }
+        }
+        
+        int flexPct = 0;
+        if (xSemaphoreTake(telemetryMutex, 0) == pdTRUE) {
+            flexPct = sharedTelemetry.flexPercent[activeFingerIdx];
             xSemaphoreGive(telemetryMutex);
         }
         
-        int targetRom = currentPrescription.requiredRom[0];
+        int targetRom = currentPrescription.requiredRom[activeFingerIdx];
+        if (targetRom <= 0) targetRom = 50; // Fallback to 50% if ROM not set
         
-        // Phase 0: Waiting for release (straight hand, flex < 20%)
+        // Phase 0: Waiting for release (active finger flex < 20%)
         if (sessionState.currentStepInSequence == 0) {
-            if (maxFlexPct < 20) {
-                Serial.println("[Game-Bend] Hand straight. Phase 1: Prompting bend.");
+            if (flexPct < 20) {
+                Serial.printf("[Game-Bend] Active finger %d straight. Phase 1: Prompting bend.\n", activeFingerIdx + 1);
                 sessionState.currentStepInSequence = 1;
                 playTrack(3, 2); // "כופף את האצבע והחזק אותה מכופפת"
             }
         }
-        // Phase 1: Waiting for bend (flex >= targetRom)
+        // Phase 1: Waiting for bend (active finger flex >= targetRom)
         else if (sessionState.currentStepInSequence == 1) {
-            if (maxFlexPct >= targetRom) {
-                Serial.println("[Game-Bend] ROM target reached! Phase 2: Start hold.");
+            if (flexPct >= targetRom) {
+                Serial.printf("[Game-Bend] Active finger %d ROM target reached (%d%%)! Phase 2: Start hold.\n", activeFingerIdx + 1, targetRom);
                 sessionState.currentStepInSequence = 2;
                 sessionState.isHolding = true;
                 sessionState.holdStartTime = now;
@@ -948,11 +1007,11 @@ inline void updateGame() {
         }
         // Phase 2: Holding
         else if (sessionState.currentStepInSequence == 2) {
-            if (maxFlexPct >= targetRom) {
+            if (flexPct >= targetRom) {
                 triggerHapticContinuous();
                 
-                if (maxFlexPct > sessionState.maxBendRom) {
-                    sessionState.maxBendRom = maxFlexPct;
+                if (flexPct > sessionState.maxBendRom) {
+                    sessionState.maxBendRom = flexPct;
                 }
                 
                 // Check hold duration

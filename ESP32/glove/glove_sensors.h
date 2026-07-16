@@ -23,27 +23,10 @@ extern int fsrCalGrams[3];
 
 
 inline float getFsrForceGrams(int raw) {
-    int fMin = forceMin;
-    int fMax = forceMax;
-    
-    // Use default reference bounds if uncalibrated
-    if (fMin == 4095 && fMax == 0) {
-        fMin = 3900;
-        fMax = 290;
-    }
-    
-    if (raw >= fMin) return 0.0f;
-    if (raw <= 0) return 3000.0f; // Safe upper bound clamp
-    
-    float diff = (float)(fMin - raw);
-    float range = (float)(fMin - fMax);
-    float diff_scaled = diff;
-    if (range > 100.0f) {
-        diff_scaled = diff * (3610.0f / range);
-    }
-    
-    float grams = 0.20573f * pow(diff_scaled, 1.1313f);
-    return grams < 0.0f ? 0.0f : grams;
+    if (raw >= 4000) return 0.0f; // FSR idle state (unloaded)
+    float x = (float)raw;
+    float grams = (((-1.47891421e-07 * x + 1.13881999e-03) * x + -2.84335776e+00) * x + 2.66788197e+03) + 100.0f;
+    return grams < 0.0f ? 0.0f : grams; // Clamp negative values
 }
 #include <Preferences.h>
 extern Preferences preferences;

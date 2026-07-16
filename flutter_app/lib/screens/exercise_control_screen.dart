@@ -24,6 +24,8 @@ class ExerciseControlScreen extends StatefulWidget {
   final String patientName;
   final GamePrescription prescription;
 
+  static bool isActive = false;
+
   const ExerciseControlScreen({
     super.key,
     required this.patientId,
@@ -47,11 +49,13 @@ class _ExerciseControlScreenState extends State<ExerciseControlScreen> {
   @override
   void initState() {
     super.initState();
+    ExerciseControlScreen.isActive = true;
     _connectTelemetry();
   }
 
   @override
   void dispose() {
+    ExerciseControlScreen.isActive = false;
     // Cancel only our subscription; leave the shared service alone so other
     // screens using it aren't disrupted.
     _sub?.cancel();
@@ -400,33 +404,9 @@ class _ExerciseControlScreenState extends State<ExerciseControlScreen> {
   }
 
   double _calculateFsrGrams(int raw) {
-    final activePatient = AppStateScope.of(context).activePatient;
-    int fMin = 3900;
-    int fMax = 290;
-
-    if (activePatient != null) {
-      final cal = activePatient.calibration;
-      if (cal.containsKey('fo_min') && cal.containsKey('fo_max')) {
-        final calMin = cal['fo_min'] as int;
-        final calMax = cal['fo_max'] as int;
-        if (calMin != 4095 || calMax != 0) {
-          fMin = calMin;
-          fMax = calMax;
-        }
-      }
-    }
-
-    if (raw >= fMin) return 0.0;
-    if (raw <= 0) return 3000.0;
-
-    double diff = (fMin - raw).toDouble();
-    double range = (fMin - fMax).toDouble();
-    double diffScaled = diff;
-    if (range > 100.0) {
-      diffScaled = diff * (3610.0 / range);
-    }
-
-    double grams = 0.20573 * pow(diffScaled, 1.1313);
+    if (raw >= 4000) return 0.0;
+    double x = raw.toDouble();
+    double grams = (((-1.47891421e-07 * x + 1.13881999e-03) * x + -2.84335776e+00) * x + 2.66788197e+03) + 100.0;
     return grams < 0.0 ? 0.0 : grams;
   }
 
