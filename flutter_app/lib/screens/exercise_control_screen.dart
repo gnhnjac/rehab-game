@@ -707,13 +707,14 @@ class _ExerciseControlScreenState extends State<ExerciseControlScreen> {
                     ),
                     const SizedBox(height: 20),
                     Text(
-                      completedSuccess ? 'התרגיל הושלם בהצלחה!' : 'פג הזמן!',
+                      completedSuccess ? 'התרגיל הושלם בהצלחה!' : 'תם הזמן!',
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 22,
                         fontWeight: FontWeight.bold,
                       ),
                       textAlign: TextAlign.center,
+                      textDirection: TextDirection.rtl,
                     ),
                     const SizedBox(height: 12),
                     Text(
@@ -726,6 +727,7 @@ class _ExerciseControlScreenState extends State<ExerciseControlScreen> {
                         height: 1.4,
                       ),
                       textAlign: TextAlign.center,
+                      textDirection: TextDirection.rtl,
                     ),
                     const SizedBox(height: 24),
                     Container(

@@ -71,7 +71,7 @@ class _FlexCalibrationScreenState extends State<FlexCalibrationScreen> {
   }
 
   void _startSlowPoll() {
-    _pollTimer = Timer.periodic(const Duration(milliseconds: 1500), (_) async {
+    _pollTimer = Timer.periodic(const Duration(milliseconds: 300), (_) async {
       try {
         final raw = await _api.fetchRawSensors();
         if (mounted) {

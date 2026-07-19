@@ -121,7 +121,7 @@ class _BoxCalibrationScreenState extends State<BoxCalibrationScreen> {
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
-                initialValue: shape,
+                value: shape,
                 dropdownColor: const Color(0xFF141722),
                 decoration: const InputDecoration(
                   labelText: 'Shape',

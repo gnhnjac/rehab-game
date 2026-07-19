@@ -7,7 +7,7 @@
 #include <Preferences.h>
 #include <ESPmDNS.h>
 #include "glove_secrets.h"
-#include "../parameters.h"
+#include "parameters.h"
 #include "glove_game.h"
 
 

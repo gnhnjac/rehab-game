@@ -1,7 +1,7 @@
 #pragma once
 #include <Arduino.h>
 #include <vector>
-#include "../parameters.h"
+#include "parameters.h"
 #include "glove_audio.h"
 #include "glove_haptic.h"
 

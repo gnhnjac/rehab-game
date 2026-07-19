@@ -5,7 +5,7 @@
 #include <esp_wifi.h>
 #include "soc/soc.h"
 #include "soc/rtc_cntl_reg.h"
-#include "../parameters.h"
+#include "parameters.h"
 
 #include <Adafruit_NeoPixel.h>
 
@@ -183,7 +183,7 @@ void setupAudio() {
     }
     selectSdCard();
     delay(1200);
-    setVolume(30);
+    setVolume(18);
 }
 
 void playAudioTrack(uint8_t cmd, uint8_t high_arg, uint8_t low_arg) {

@@ -4,7 +4,7 @@
 #include <esp_now.h>
 #include <WiFi.h>
 #include <unordered_map>
-#include "../parameters.h"
+#include "parameters.h"
 #include "glove_haptic.h"
 
 extern bool isAPMode;

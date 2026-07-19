@@ -2,7 +2,7 @@
 #define GLOVE_SENSORS_H
 
 #include <Arduino.h>
-#include "../parameters.h"
+#include "parameters.h"
 
 // Configuration
 const int flexPins[NUM_FINGERS] = {FLEX_PIN_1, FLEX_PIN_2, FLEX_PIN_3, FLEX_PIN_4, FLEX_PIN_5};
