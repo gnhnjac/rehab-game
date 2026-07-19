@@ -47,7 +47,21 @@ class _PrescriptionEditScreenState extends State<PrescriptionEditScreen> {
 
     if (p is BendPrescription) {
       _bendActiveFingers = List<bool>.from(p.activeFingers);
+      if (_bendActiveFingers.length > 5) {
+        _bendActiveFingers = _bendActiveFingers.sublist(0, 5);
+      }
+      while (_bendActiveFingers.length < 5) {
+        _bendActiveFingers.add(true);
+      }
+
       _bendFingerRomTargets = List<int>.from(p.fingerRomTargets);
+      if (_bendFingerRomTargets.length > 5) {
+        _bendFingerRomTargets = _bendFingerRomTargets.sublist(0, 5);
+      }
+      while (_bendFingerRomTargets.length < 5) {
+        _bendFingerRomTargets.add(70);
+      }
+
       _bendSequence = List<int>.from(p.sequence);
     } else {
       _bendActiveFingers = List.filled(5, true);
@@ -359,6 +373,9 @@ class _PrescriptionEditScreenState extends State<PrescriptionEditScreen> {
                   runSpacing: 8,
                   children: List.generate(_bendSequence.length, (sIdx) {
                     final fIdx = _bendSequence[sIdx] - 1;
+                    if (fIdx < 0 || fIdx >= _fingerNames.length) {
+                      return const SizedBox.shrink();
+                    }
                     return InputChip(
                       label: Text('${sIdx + 1}. ${_fingerNames[fIdx]}'),
                       backgroundColor: const Color(0xFF1E293B),
