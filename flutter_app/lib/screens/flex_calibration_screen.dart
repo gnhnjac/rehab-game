@@ -144,6 +144,27 @@ class _FlexCalibrationScreenState extends State<FlexCalibrationScreen> {
       return;
     }
     
+    // Validate range for each connected finger (ADC > 100)
+    final List<String> failedFingers = [];
+    final fingerNames = ['Thumb', 'Index', 'Middle', 'Ring', 'Pinky'];
+    for (int i = 0; i < 5; i++) {
+      if (_capturedMin![i] > 100) {
+        final diff = _capturedMin![i] - _capturedMax![i];
+        if (diff < 150) {
+          failedFingers.add(fingerNames[i]);
+        }
+      }
+    }
+    if (failedFingers.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: Calibration range is too small for: ${failedFingers.join(', ')}. Please open your hand fully for step 1 and close it tightly for step 2.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
     final appState = AppStateScope.of(context);
     final activePatient = appState.activePatient;
     if (activePatient == null) {
