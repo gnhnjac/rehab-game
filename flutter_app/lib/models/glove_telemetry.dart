@@ -81,6 +81,7 @@ class GloveTelemetry {
   final int successCount;
   final int failureCount;
   final int currentCycle;
+  final bool isHolding;
   final int gameType;
   final bool sessionCompletedSuccess;
   final String exitReason;
@@ -97,6 +98,7 @@ class GloveTelemetry {
     this.successCount = 0,
     this.failureCount = 0,
     this.currentCycle = 0,
+    this.isHolding = false,
     this.gameType = 0,
     this.sessionCompletedSuccess = false,
     this.exitReason = 'aborted',
@@ -143,6 +145,7 @@ class GloveTelemetry {
       successCount: json['success_count'] ?? 0,
       failureCount: json['failure_count'] ?? 0,
       currentCycle: json['current_cycle'] ?? 0,
+      isHolding: json['is_holding'] ?? false,
       gameType: json['game_type'] ?? 0,
       sessionCompletedSuccess: json['session_completed_success'] ?? false,
       exitReason: json['exit_reason'] ?? 'aborted',
@@ -162,6 +165,7 @@ class GloveTelemetry {
       successCount: 0,
       failureCount: 0,
       currentCycle: 0,
+      isHolding: false,
       gameType: 0,
       sessionCompletedSuccess: false,
       exitReason: 'aborted',
@@ -180,6 +184,7 @@ class GloveTelemetry {
     'success_count': successCount,
     'failure_count': failureCount,
     'current_cycle': currentCycle,
+    'is_holding': isHolding,
     'game_type': gameType,
     'session_completed_success': sessionCompletedSuccess,
     'exit_reason': exitReason,

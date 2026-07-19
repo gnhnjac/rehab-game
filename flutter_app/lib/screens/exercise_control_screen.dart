@@ -241,6 +241,7 @@ class _ExerciseControlScreenState extends State<ExerciseControlScreen> {
           _buildInstructionsCard(color),
           const SizedBox(height: 16),
           _buildStatusCard(color),
+          _buildBendVisualPanel(color),
           const SizedBox(height: 20),
           _buildStartButton(color),
         ],
@@ -343,6 +344,17 @@ class _ExerciseControlScreenState extends State<ExerciseControlScreen> {
     final timeRemaining = t?.timeRemaining ?? 0;
     final calibrating = t?.calibrating ?? false;
 
+    int activeFingerIndex = -1;
+    final fingerNames = ['Thumb', 'Index', 'Middle', 'Ring', 'Pinky'];
+    if (widget.prescription is BendPrescription && t != null) {
+      final p = widget.prescription as BendPrescription;
+      if (p.sequence.isNotEmpty) {
+        final cycleIndex = t.currentCycle;
+        final fingerId = p.sequence[cycleIndex % p.sequence.length];
+        activeFingerIndex = fingerId - 1;
+      }
+    }
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -363,11 +375,11 @@ class _ExerciseControlScreenState extends State<ExerciseControlScreen> {
               ),
               _buildStat(
                 widget.prescription.type == GameType.bend
-                    ? 'Flex'
+                    ? 'Active Finger'
                     : (widget.prescription.type == GameType.cubesBoxes ? 'Status' : 'Force'),
                 widget.prescription.type == GameType.bend
-                    ? (t != null && t!.flex.percent.length >= 5
-                        ? t!.flex.percent.map((p) => '$p%').join(' ')
+                    ? (t != null && activeFingerIndex >= 0 && t!.flex.percent.length > activeFingerIndex
+                        ? '${fingerNames[activeFingerIndex]}: ${t!.flex.percent[activeFingerIndex]}%'
                         : '—')
                     : (widget.prescription.type == GameType.cubesBoxes
                         ? 'Active'
@@ -375,7 +387,7 @@ class _ExerciseControlScreenState extends State<ExerciseControlScreen> {
                             ? '${_calculateFsrGrams(t!.force.raw.first).round()}g'
                             : '—')),
                 color,
-                fontSize: widget.prescription.type == GameType.bend ? 12 : 24,
+                fontSize: widget.prescription.type == GameType.bend ? 16 : 24,
               ),
             ],
           ),
@@ -397,6 +409,211 @@ class _ExerciseControlScreenState extends State<ExerciseControlScreen> {
             const SizedBox(height: 16),
             Text('Press start to push this prescription to the glove.',
                 style: TextStyle(color: Colors.grey[500], fontSize: 12), textAlign: TextAlign.center),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBendVisualPanel(Color color) {
+    final t = _latest;
+    if (widget.prescription.type != GameType.bend) return const SizedBox.shrink();
+
+    final p = widget.prescription as BendPrescription;
+    final fingerNames = ['Thumb', 'Index', 'Middle', 'Ring', 'Pinky'];
+    
+    int activeFingerIndex = -1;
+    int targetRom = 70;
+    String activeFingerName = '';
+    
+    if (t != null && p.sequence.isNotEmpty) {
+      final cycleIndex = t.currentCycle;
+      final fingerId = p.sequence[cycleIndex % p.sequence.length];
+      activeFingerIndex = fingerId - 1;
+      if (activeFingerIndex >= 0 && activeFingerIndex < 5) {
+        targetRom = p.fingerRomTargets[activeFingerIndex];
+        activeFingerName = fingerNames[activeFingerIndex];
+      }
+    }
+
+    final isHolding = t?.isHolding ?? false;
+
+    return Container(
+      margin: const EdgeInsets.only(top: 16),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF141722),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF232A3D)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Live Hand Feedback',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+              if (_sessionStarted && activeFingerName.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: color.withOpacity(0.3)),
+                  ),
+                  child: Text(
+                    'Active: $activeFingerName',
+                    style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          // Flex values visual representation
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: List.generate(5, (idx) {
+              final isFingerActiveInRx = p.activeFingers[idx];
+              final isCurrentlyTarget = idx == activeFingerIndex;
+              final currentFlex = (t != null && t.flex.percent.length > idx) ? t.flex.percent[idx] : 0;
+              final fingerTarget = p.fingerRomTargets[idx];
+              
+              Color barColor = Colors.grey[700]!;
+              if (isFingerActiveInRx) {
+                barColor = isCurrentlyTarget ? color : const Color(0xFF3B82F6);
+              }
+
+              return Column(
+                children: [
+                  Text(
+                    '${isFingerActiveInRx ? "$currentFlex%" : "—"}',
+                    style: TextStyle(
+                      color: isCurrentlyTarget ? barColor : Colors.white70,
+                      fontWeight: FontWeight.bold,
+                      fontSize: isCurrentlyTarget ? 15 : 12,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  // Vertical bar
+                  Container(
+                    width: 24,
+                    height: 120,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0D0E15),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isCurrentlyTarget 
+                            ? barColor.withOpacity(0.8) 
+                            : Colors.white.withOpacity(0.05),
+                        width: isCurrentlyTarget ? 2 : 1,
+                      ),
+                      boxShadow: isCurrentlyTarget 
+                          ? [BoxShadow(color: barColor.withOpacity(0.25), blurRadius: 8, spreadRadius: 1)]
+                          : null,
+                    ),
+                    child: Stack(
+                      alignment: Alignment.bottomCenter,
+                      children: [
+                        // Fill bar
+                        if (isFingerActiveInRx)
+                          AnimatedContainer(
+                            duration: const Duration(milliseconds: 100),
+                            width: double.infinity,
+                            height: (currentFlex / 100) * 120,
+                            decoration: BoxDecoration(
+                              color: barColor,
+                              borderRadius: BorderRadius.circular(10),
+                              gradient: LinearGradient(
+                                begin: Alignment.bottomCenter,
+                                end: Alignment.topCenter,
+                                colors: [
+                                  barColor.withOpacity(0.6),
+                                  barColor,
+                                ],
+                              ),
+                            ),
+                          ),
+                        // Target ROM line indicator
+                        if (isFingerActiveInRx)
+                          Positioned(
+                            bottom: (fingerTarget / 100) * 120,
+                            left: 0,
+                            right: 0,
+                            child: Container(
+                              height: 2,
+                              color: Colors.orangeAccent,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    fingerNames[idx].substring(0, 3),
+                    style: TextStyle(
+                      color: isCurrentlyTarget ? barColor : Colors.grey,
+                      fontWeight: isCurrentlyTarget ? FontWeight.bold : FontWeight.normal,
+                      fontSize: 12,
+                    ),
+                  ),
+                  if (isFingerActiveInRx)
+                    Text(
+                      'T: $fingerTarget%',
+                      style: TextStyle(color: Colors.grey[500], fontSize: 10),
+                    ),
+                ],
+              );
+            }),
+          ),
+          if (_sessionStarted && activeFingerName.isNotEmpty) ...[
+            const Divider(color: Color(0xFF232A3D), height: 32),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: isHolding 
+                    ? const Color(0xFF065F46) // dark green for holding
+                    : const Color(0xFF1E293B),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isHolding ? const Color(0xFF10B981) : Colors.white.withOpacity(0.05),
+                ),
+              ),
+              child: Column(
+                children: [
+                  Text(
+                    isHolding 
+                        ? 'HOLD IT! (החזק!)' 
+                        : 'BEND YOUR ${activeFingerName.toUpperCase()} FINGER!',
+                    style: TextStyle(
+                      color: isHolding ? Colors.greenAccent : Colors.orangeAccent,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    isHolding 
+                        ? 'Keep bending above target ROM!' 
+                        : 'Reach target of $targetRom% ROM to start the timer.',
+                    style: TextStyle(
+                      color: isHolding ? Colors.white70 : Colors.grey[400],
+                      fontSize: 13,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
           ],
         ],
       ),

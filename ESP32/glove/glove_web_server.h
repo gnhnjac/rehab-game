@@ -230,6 +230,7 @@ inline void handleTelemetry() {
     json += "\"success_count\":" + String(sessionState.successCount) + ",";
     json += "\"failure_count\":" + String(sessionState.failureCount) + ",";
     json += "\"current_cycle\":" + String(sessionState.currentCycle) + ",";
+    json += "\"is_holding\":" + String(sessionState.isHolding ? "true" : "false") + ",";
     json += "\"game_type\":" + String(sessionState.active ? currentPrescription.gameType : 0) + ",";
     json += "\"session_completed_success\":" + String(lastSessionCompletedSuccess ? "true" : "false") + ",";
     json += "\"exit_reason\":\"" + exitReasonStr + "\",";

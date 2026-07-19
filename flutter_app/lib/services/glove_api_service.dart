@@ -144,10 +144,10 @@ class GloveApiService {
         query['holdTime'] = '${p.holdDurationSeconds}';
       case BendPrescription p:
         query['holdTime'] = '${p.holdDurationSeconds}';
-        // Broadcast the ROM target across all 5 fingers.
-        query['requiredRom'] =
-            List.filled(5, p.targetRomPercent.round()).join(',');
-        query['activeFingers'] = '11111';
+        query['requiredRom'] = p.fingerRomTargets.join(',');
+        query['activeFingers'] =
+            p.activeFingers.map((f) => f ? '1' : '0').join('');
+        query['sequence'] = p.sequence.join(',');
     }
 
     if (patientId != null && patientId.isNotEmpty) {
