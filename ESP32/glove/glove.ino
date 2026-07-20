@@ -48,6 +48,7 @@ bool isCalibrated = false;
 GamePrescription currentPrescription;
 GameSessionState sessionState;
 bool lastSessionCompletedSuccess = false;
+SessionStopReason lastSessionExitReason = STOP_REASON_ABORTED;
 
 // Piecewise linear force calibration coefficients (raw ADC -> grams)
 int fsrCalRaw[3] = {4095, 2000, 500};
@@ -144,7 +145,7 @@ void loop() {
         // Handle physical button toggle: start/stop the last game prescription
         if (sessionState.active) {
             Serial.println("[Button] Game session aborted by wireless button press.");
-            stopGameSession(false);
+            stopGameSession(STOP_REASON_ABORTED);
         } 
         else if (currentPrescription.gameType != GAME_NONE) {
             Serial.println("[Button] Starting game session by wireless button press.");
@@ -190,6 +191,35 @@ void loop() {
             }
             Serial.printf("%%] | Force Raw: %d | Force %%: %d%%\n", forceRaw, forcePercent);
             printRegistry();
+
+            // Print JSON telemetry for local HTML dashboard
+            Serial.print("JSON:{\"flex\":[");
+            for (int i = 0; i < NUM_FINGERS; i++) {
+                Serial.print(flexPercent[i]);
+                if (i < NUM_FINGERS - 1) Serial.print(",");
+            }
+            Serial.printf("],\"force\":%d,\"calibrated\":%s,\"boxes\":[", forcePercent, isCalibrated ? "true" : "false");
+            
+            bool firstBox = true;
+            for (const auto& pair : boxRegistry) {
+                const RegisteredBox& box = pair.second;
+                if (!firstBox) Serial.print(",");
+                firstBox = false;
+                
+                Serial.print("{\"mac\":\"");
+                for (int j = 0; j < 6; j++) {
+                    Serial.printf("%02X", box.mac[j]);
+                    if (j < 5) Serial.print(":");
+                }
+                Serial.print("\",\"cube\":\"");
+                if (box.current_cube_len > 0) {
+                    for (int j = 0; j < box.current_cube_len; j++) {
+                        Serial.printf("%02X", box.current_cube_uid[j]);
+                    }
+                }
+                Serial.print("\"}");
+            }
+            Serial.println("]}");
         }
     }
     

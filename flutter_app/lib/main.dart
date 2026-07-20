@@ -1,12 +1,15 @@
-// ignore_for_file: deprecated_member_use
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'repositories/patient_repository_provider.dart';
 import 'screens/patient_list_screen.dart';
+import 'screens/exercise_control_screen.dart';
+import 'models/game_prescription.dart';
 import 'services/cube_registry.dart';
 import 'services/box_registry.dart';
+import 'services/telemetry_provider.dart';
 import 'state/app_state.dart';
 import 'state/app_state_scope.dart';
 
@@ -45,15 +48,64 @@ void main() async {
   runApp(const RehabGloveApp());
 }
 
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-class RehabGloveApp extends StatelessWidget {
+class RehabGloveApp extends StatefulWidget {
   const RehabGloveApp({super.key});
+
+  @override
+  State<RehabGloveApp> createState() => _RehabGloveAppState();
+}
+
+class _RehabGloveAppState extends State<RehabGloveApp> {
+  StreamSubscription? _telemetrySub;
+
+  @override
+  void initState() {
+    super.initState();
+    _startGlobalTelemetryListener();
+  }
+
+  @override
+  void dispose() {
+    _telemetrySub?.cancel();
+    super.dispose();
+  }
+
+  void _startGlobalTelemetryListener() {
+    final service = TelemetryProvider.getService();
+    _telemetrySub = service.telemetryStream.listen((t) {
+      if (t.sessionActive && !ExerciseControlScreen.isActive) {
+        final context = navigatorKey.currentContext;
+        if (context != null) {
+          final appState = AppStateScope.of(context);
+          final activePatient = appState.activePatient;
+          if (activePatient != null && t.gameType >= 1 && t.gameType <= 3) {
+            final gameType = GameType.values[t.gameType - 1];
+            final prescription = activePatient.prescriptions[gameType];
+            if (prescription != null) {
+              navigatorKey.currentState?.push(
+                MaterialPageRoute(
+                  builder: (_) => ExerciseControlScreen(
+                    patientId: activePatient.id,
+                    patientName: activePatient.name,
+                    prescription: prescription,
+                  ),
+                ),
+              );
+            }
+          }
+        }
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return AppStateScope(
       notifier: AppState(repository: PatientRepositoryProvider.getRepository())..loadPatients(),
       child: MaterialApp(
+        navigatorKey: navigatorKey,
         title: 'Rehab Glove Hub',
         debugShowCheckedModeBanner: false,
         theme: ThemeData.dark().copyWith(

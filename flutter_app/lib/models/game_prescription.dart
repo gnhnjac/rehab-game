@@ -97,31 +97,64 @@ final class PinchPrescription extends GamePrescription {
 
 final class BendPrescription extends GamePrescription {
   final int holdDurationSeconds;
-  final double targetRomPercent;
+  final List<bool> activeFingers;
+  final List<int> sequence;
+  final List<int> fingerRomTargets;
 
   const BendPrescription({
     required super.cycles,
     required this.holdDurationSeconds,
-    required this.targetRomPercent,
+    this.activeFingers = const [true, true, true, true, true],
+    this.sequence = const [1, 2, 3, 4, 5],
+    this.fingerRomTargets = const [70, 70, 70, 70, 70],
   }) : super(type: GameType.bend);
+
+  double get targetRomPercent =>
+      (fingerRomTargets.isNotEmpty ? fingerRomTargets.first : 70).toDouble();
 
   BendPrescription copyWith({
     int? cycles,
     int? holdDurationSeconds,
-    double? targetRomPercent,
+    List<bool>? activeFingers,
+    List<int>? sequence,
+    List<int>? fingerRomTargets,
   }) {
     return BendPrescription(
       cycles: cycles ?? this.cycles,
       holdDurationSeconds: holdDurationSeconds ?? this.holdDurationSeconds,
-      targetRomPercent: targetRomPercent ?? this.targetRomPercent,
+      activeFingers: activeFingers ?? this.activeFingers,
+      sequence: sequence ?? this.sequence,
+      fingerRomTargets: fingerRomTargets ?? this.fingerRomTargets,
     );
   }
 
   factory BendPrescription.fromJson(Map<String, dynamic> json) {
+    final activeFingersRaw = json['activeFingers'] as List?;
+    final activeFingers = activeFingersRaw != null
+        ? activeFingersRaw.map((e) => e as bool).toList()
+        : const [true, true, true, true, true];
+
+    final sequenceRaw = json['sequence'] as List?;
+    final sequence = sequenceRaw != null
+        ? sequenceRaw.map((e) => (e as num).toInt()).toList()
+        : const [1, 2, 3, 4, 5];
+
+    final fingerRomTargetsRaw = json['fingerRomTargets'] as List?;
+    List<int> fingerRomTargets;
+    if (fingerRomTargetsRaw != null) {
+      fingerRomTargets =
+          fingerRomTargetsRaw.map((e) => (e as num).toInt()).toList();
+    } else {
+      final legacyRom = (json['targetRomPercent'] as num? ?? 70).toInt();
+      fingerRomTargets = List.filled(5, legacyRom);
+    }
+
     return BendPrescription(
       cycles: json['cycles'] as int,
       holdDurationSeconds: json['holdDurationSeconds'] as int,
-      targetRomPercent: (json['targetRomPercent'] as num).toDouble(),
+      activeFingers: activeFingers,
+      sequence: sequence,
+      fingerRomTargets: fingerRomTargets,
     );
   }
 
@@ -131,5 +164,8 @@ final class BendPrescription extends GamePrescription {
         'cycles': cycles,
         'holdDurationSeconds': holdDurationSeconds,
         'targetRomPercent': targetRomPercent,
+        'activeFingers': activeFingers,
+        'sequence': sequence,
+        'fingerRomTargets': fingerRomTargets,
       };
 }

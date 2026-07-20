@@ -32,11 +32,24 @@ class FirestorePatientRepository implements PatientRepository {
     // 3. Bend
     final bend = rxData['bend'] as Map<String, dynamic>? ?? {};
     final romList = bend['requiredRom'] as List?;
-    final romVal = romList != null && romList.isNotEmpty ? romList.first : 70.0;
+    final List<int> fingerRomTargets = romList != null
+        ? romList.map((e) => (e as num).toInt()).toList()
+        : List.filled(5, 70);
+    final activeFingersList = bend['activeFingers'] as List?;
+    final List<bool> activeFingers = activeFingersList != null
+        ? activeFingersList.map((e) => e as bool).toList()
+        : List.filled(5, true);
+    final sequenceList = bend['sequence'] as List?;
+    final List<int> sequence = sequenceList != null
+        ? sequenceList.map((e) => (e as num).toInt()).toList()
+        : const [1, 2, 3, 4, 5];
+
     prescriptionsMap[GameType.bend] = BendPrescription(
       cycles: (bend['cycles'] as num? ?? 10).toInt(),
       holdDurationSeconds: (bend['allowedTimeSeconds'] as num? ?? 5).toInt(),
-      targetRomPercent: (romVal as num? ?? 70.0).toDouble(),
+      activeFingers: activeFingers,
+      sequence: sequence,
+      fingerRomTargets: fingerRomTargets,
     );
 
     // Parse calibration
@@ -141,7 +154,9 @@ class FirestorePatientRepository implements PatientRepository {
       updateMap['prescription.bend'] = {
         'cycles': prescription.cycles,
         'allowedTimeSeconds': prescription.holdDurationSeconds,
-        'requiredRom': List.filled(5, prescription.targetRomPercent.round()),
+        'requiredRom': prescription.fingerRomTargets,
+        'activeFingers': prescription.activeFingers,
+        'sequence': prescription.sequence,
       };
     }
 

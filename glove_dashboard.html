@@ -586,66 +586,65 @@
         setStatus('uncalibrated');
         calibrationPrompt.style.display = 'block';
         sensorDashboard.style.display = 'none';
-        return;
-      }
+      } else {
+        setStatus('connected');
+        calibrationPrompt.style.display = 'none';
+        sensorDashboard.style.display = 'flex';
 
-      setStatus('connected');
-      calibrationPrompt.style.display = 'none';
-      sensorDashboard.style.display = 'flex';
+        // 1. Populate Flex and Force Sensors Dynamically
+        if (data.flex) {
+          // Build elements if number of sensors changes
+          if (sensorDashboard.children.length !== data.flex.length + 1) {
+            sensorDashboard.innerHTML = '';
+            
+            // Flex sensors
+            data.flex.forEach((val, idx) => {
+              const item = document.createElement('div');
+              item.className = 'sensor-item';
+              item.id = `flex-sensor-container-${idx}`;
+              item.innerHTML = `
+                <div class="sensor-header">
+                  <span class="sensor-name">Flex Sensor (Finger ${idx + 1})</span>
+                  <span id="flex-val-${idx}" class="sensor-value">0%</span>
+                </div>
+                <div class="progress-container">
+                  <div id="flex-bar-${idx}" class="progress-bar" style="width: 0%"></div>
+                </div>
+              `;
+              sensorDashboard.appendChild(item);
+            });
 
-      // 1. Populate Flex and Force Sensors Dynamically
-      if (data.flex) {
-        // Build elements if number of sensors changes
-        if (sensorDashboard.children.length !== data.flex.length + 1) {
-          sensorDashboard.innerHTML = '';
-          
-          // Flex sensors
-          data.flex.forEach((val, idx) => {
-            const item = document.createElement('div');
-            item.className = 'sensor-item';
-            item.id = `flex-sensor-container-${idx}`;
-            item.innerHTML = `
+            // Force sensor
+            const forceItem = document.createElement('div');
+            forceItem.className = 'sensor-item force';
+            forceItem.innerHTML = `
               <div class="sensor-header">
-                <span class="sensor-name">Flex Sensor (Finger ${idx + 1})</span>
-                <span id="flex-val-${idx}" class="sensor-value">0%</span>
+                <span class="sensor-name">Force Sensor (FSR)</span>
+                <span id="force-val" class="sensor-value">0%</span>
               </div>
               <div class="progress-container">
-                <div id="flex-bar-${idx}" class="progress-bar" style="width: 0%"></div>
+                <div id="force-bar" class="progress-bar" style="width: 0%"></div>
               </div>
             `;
-            sensorDashboard.appendChild(item);
+            sensorDashboard.appendChild(forceItem);
+          }
+
+          // Update values
+          data.flex.forEach((val, idx) => {
+            const bar = document.getElementById(`flex-bar-${idx}`);
+            const text = document.getElementById(`flex-val-${idx}`);
+            if (bar && text) {
+              bar.style.width = `${val}%`;
+              text.textContent = `${val}%`;
+            }
           });
 
-          // Force sensor
-          const forceItem = document.createElement('div');
-          forceItem.className = 'sensor-item force';
-          forceItem.innerHTML = `
-            <div class="sensor-header">
-              <span class="sensor-name">Force Sensor (FSR)</span>
-              <span id="force-val" class="sensor-value">0%</span>
-            </div>
-            <div class="progress-container">
-              <div id="force-bar" class="progress-bar" style="width: 0%"></div>
-            </div>
-          `;
-          sensorDashboard.appendChild(forceItem);
-        }
-
-        // Update values
-        data.flex.forEach((val, idx) => {
-          const bar = document.getElementById(`flex-bar-${idx}`);
-          const text = document.getElementById(`flex-val-${idx}`);
-          if (bar && text) {
-            bar.style.width = `${val}%`;
-            text.textContent = `${val}%`;
+          const forceBar = document.getElementById('force-bar');
+          const forceText = document.getElementById('force-val');
+          if (forceBar && forceText) {
+            forceBar.style.width = `${data.force}%`;
+            forceText.textContent = `${data.force}%`;
           }
-        });
-
-        const forceBar = document.getElementById('force-bar');
-        const forceText = document.getElementById('force-val');
-        if (forceBar && forceText) {
-          forceBar.style.width = `${data.force}%`;
-          forceText.textContent = `${data.force}%`;
         }
       }
 
