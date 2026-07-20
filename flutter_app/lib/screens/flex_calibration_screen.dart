@@ -150,7 +150,7 @@ class _FlexCalibrationScreenState extends State<FlexCalibrationScreen> {
     for (int i = 0; i < 5; i++) {
       if (_capturedMin![i] > 100) {
         final diff = _capturedMin![i] - _capturedMax![i];
-        if (diff < 150) {
+        if (diff <= 0) {
           failedFingers.add(fingerNames[i]);
         }
       }
@@ -158,7 +158,7 @@ class _FlexCalibrationScreenState extends State<FlexCalibrationScreen> {
     if (failedFingers.isNotEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error: Calibration range is too small for: ${failedFingers.join(', ')}. Please open your hand fully for step 1 and close it tightly for step 2.'),
+          content: Text('Error: Closed hand value must be lower than open hand value for: ${failedFingers.join(', ')}.'),
           backgroundColor: Colors.redAccent,
         ),
       );
