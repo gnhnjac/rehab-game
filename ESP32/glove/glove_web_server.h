@@ -754,6 +754,11 @@ inline void setupNetwork() {
         Serial.println(localIP);
         Serial.printf("[Network] Operating Channel: %d\n", WiFi.channel());
         
+        // Initialize NTP sync on bootup here!
+        configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+        Serial.println("[NTP] Initializing background NTP sync on Wi-Fi connection...");
+        ntpInitialized = true;
+        
         // Set up mDNS
         if (MDNS.begin("rehab-glove")) {
             Serial.println("[Network] mDNS responder started at http://rehab-glove.local");

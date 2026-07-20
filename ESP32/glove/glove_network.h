@@ -75,25 +75,9 @@ inline void setupWifi() {
 inline uint32_t getEpochTime() {
     if (WiFi.status() != WL_CONNECTED) return millis() / 1000; // fallback relative time
     
-    if (!ntpInitialized) {
-        // Configure NTP. GMT Offset is 0, daylight offset is 0.
-        configTime(0, 0, "pool.ntp.org", "time.nist.gov");
-        Serial.println("[NTP] Initializing time sync...");
-        ntpInitialized = true;
-        
-        // Wait up to 3 seconds for initial sync
-        int timeRetries = 0;
-        time_t temp = time(nullptr);
-        while (temp < 1600000000 && timeRetries < 30) {
-            delay(100);
-            temp = time(nullptr);
-            timeRetries++;
-        }
-    }
-    
     time_t now = time(nullptr);
     if (now < 1600000000) {
-        return millis() / 1000; // fallback relative time if sync fails
+        return millis() / 1000; // fallback relative time if background sync not complete yet
     }
     return (uint32_t)now;
 }
