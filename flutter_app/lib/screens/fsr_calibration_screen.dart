@@ -116,9 +116,9 @@ class _FsrCalibrationScreenState extends State<FsrCalibrationScreen> {
       );
       return;
     }
-    if (_capturedMax! >= _capturedMin!) {
+    if (_capturedMax! == _capturedMin!) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Error: Maximum squeeze raw value must be lower than the rest value (FSR raw values decrease under pressure).')),
+        const SnackBar(content: Text('Error: Rest value and Squeeze value cannot be equal.')),
       );
       return;
     }
