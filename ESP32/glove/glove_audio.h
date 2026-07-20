@@ -1,7 +1,7 @@
 #pragma once
 #include <Arduino.h>
 #include <esp_now.h>
-#include "parameters.h"
+#include "../parameters.h"
 
 // References to the Main Box MAC address tracked in glove.ino / glove_espnow.h
 extern uint8_t mainBoxMac[6];

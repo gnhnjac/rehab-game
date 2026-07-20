@@ -3,7 +3,7 @@
 
 #include <Wire.h>
 #include <Adafruit_DRV2605.h>
-#include "parameters.h"
+#include "../parameters.h"
 
 extern Adafruit_DRV2605 hapticDrv;
 extern bool hapticEnabled;

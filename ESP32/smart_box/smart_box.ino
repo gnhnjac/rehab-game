@@ -5,7 +5,7 @@
 #include <esp_wifi.h>
 #include "soc/soc.h"
 #include "soc/rtc_cntl_reg.h"
-#include "parameters.h"
+#include "../parameters.h"
 
 #include <Adafruit_NeoPixel.h>
 
@@ -197,8 +197,8 @@ void checkHeartbeats() {
     esp_now_send(gloveMac, (uint8_t *)&heartbeatMsg, sizeof(heartbeatMsg));
   }
 
-  // 2. Check for Glove timeout (15 seconds)
-  if (now - last_received_from_glove > 15000) {
+  // 2. Check for Glove timeout (25 seconds)
+  if (now - last_received_from_glove > 25000) {
     Serial.println("[Smart Box] Lost connection to Glove (heartbeat timeout). Unregistering...");
     isRegistered = false;
     
@@ -347,47 +347,56 @@ void loop(void) {
   // Handle heartbeat sending and timeout checking
   checkHeartbeats();
 
-  if (nfcFound) {
-    uint8_t success;
-    uint8_t uid[] = { 0, 0, 0, 0, 0, 0, 0 };  // Buffer to store the returned UID
-    uint8_t uidLength;                        // Length of the UID (4 or 7 bytes)
-
-    // Wait for card with a 100ms timeout (non-blocking)
-    success = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength, 100);
-
-    if (success) {
-      Serial.println("Card Entered!");
-      sendNfcEvent(EVENT_CUBE_ENTERED, uid, uidLength);
-      
-      // Card is present. Poll it in a loop to detect when it leaves.
-      int consecutiveFailures = 0;
-      while (consecutiveFailures < 12) {
-        if (!isRegistered) {
-          break; // Lost Glove connection while card is present
+    if (nfcFound) {
+      uint8_t success;
+      uint8_t uid[] = { 0, 0, 0, 0, 0, 0, 0 };  // Buffer to store the returned UID
+      uint8_t uidLength;                        // Length of the UID (4 or 7 bytes)
+ 
+      // Wait for card with a 100ms timeout (non-blocking)
+      success = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength, 100);
+ 
+      if (success) {
+        Serial.println("Card Entered!");
+        sendNfcEvent(EVENT_CUBE_ENTERED, uid, uidLength);
+        
+        // Card is present. Poll it in a loop to detect when it leaves.
+        int consecutiveFailures = 0;
+        while (consecutiveFailures < 12) {
+          if (!isRegistered) {
+            break; // Lost Glove connection while card is present
+          }
+ 
+          // Wait 100ms non-blockingly while running animations
+          unsigned long startPoll = millis();
+          while (millis() - startPoll < 100) {
+              updateLeds();
+              checkHeartbeats();
+              delay(10);
+          }
+          
+          uint8_t pollUid[7];
+          uint8_t pollUidLength = 0;
+          bool pollSuccess = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, pollUid, &pollUidLength, 100);
+          
+          if (pollSuccess) {
+            consecutiveFailures = 0; // Reset counter on successful scan
+          } else {
+            consecutiveFailures++;   // Increment on failed scan
+          }
         }
-
-        // Wait 50ms non-blockingly while running animations
-        unsigned long startPoll = millis();
-        while (millis() - startPoll < 50) {
+        
+        if (isRegistered) {
+          Serial.println("Card Left!");
+          sendNfcEvent(EVENT_CUBE_LEFT, uid, uidLength);
+        }
+      } else {
+        // Wait 150ms non-blockingly to reduce software I2C congestion when idle
+        unsigned long startIdle = millis();
+        while (millis() - startIdle < 150) {
             updateLeds();
             checkHeartbeats();
             delay(10);
         }
-        
-        uint8_t pollUid[7];
-        uint8_t pollUidLength = 0;
-        bool pollSuccess = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, pollUid, &pollUidLength, 100);
-        
-        if (pollSuccess) {
-          consecutiveFailures = 0; // Reset counter on successful scan
-        } else {
-          consecutiveFailures++;   // Increment on failed scan
-        }
-      }
-      
-      if (isRegistered) {
-        Serial.println("Card Left!");
-        sendNfcEvent(EVENT_CUBE_LEFT, uid, uidLength);
       }
     }
   }

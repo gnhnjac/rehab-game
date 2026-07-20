@@ -5,7 +5,7 @@
 #include <esp_wifi.h>
 #include "soc/soc.h"
 #include "soc/rtc_cntl_reg.h"
-#include "parameters.h"
+#include "../parameters.h"
 
 #include <Adafruit_NeoPixel.h>
 
