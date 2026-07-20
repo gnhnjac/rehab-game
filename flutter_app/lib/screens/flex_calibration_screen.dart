@@ -41,6 +41,25 @@ class _FlexCalibrationScreenState extends State<FlexCalibrationScreen> {
     super.initState();
     TelemetryProvider.getService().disconnect(); // Stop background polling
     _online = true;
+
+    // Load existing calibration from active patient if available
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final activePatient = AppStateScope.of(context).activePatient;
+      if (activePatient != null) {
+        final cal = activePatient.calibration;
+        if (cal.containsKey('flex_min') && cal.containsKey('flex_max')) {
+          final fMinList = cal['flex_min'] as List?;
+          final fMaxList = cal['flex_max'] as List?;
+          if (fMinList != null && fMaxList != null && fMinList.length == 5 && fMaxList.length == 5) {
+            setState(() {
+              _capturedMin = List<int>.from(fMinList.map((e) => (e as num).toInt()));
+              _capturedMax = List<int>.from(fMaxList.map((e) => (e as num).toInt()));
+            });
+          }
+        }
+      }
+    });
+
     _startSlowPoll();
   }
 
@@ -52,7 +71,7 @@ class _FlexCalibrationScreenState extends State<FlexCalibrationScreen> {
   }
 
   void _startSlowPoll() {
-    _pollTimer = Timer.periodic(const Duration(milliseconds: 1500), (_) async {
+    _pollTimer = Timer.periodic(const Duration(milliseconds: 300), (_) async {
       try {
         final raw = await _api.fetchRawSensors();
         if (mounted) {
@@ -77,8 +96,8 @@ class _FlexCalibrationScreenState extends State<FlexCalibrationScreen> {
         _online = true;
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Captured open hand baseline (Min limits)'),
+        SnackBar(
+          content: Text('Captured open hand baseline (Raw: $_capturedMin)'),
           backgroundColor: Colors.green,
         ),
       );
@@ -102,8 +121,8 @@ class _FlexCalibrationScreenState extends State<FlexCalibrationScreen> {
         _online = true;
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Captured closed hand baseline (Max limits)'),
+        SnackBar(
+          content: Text('Captured closed hand baseline (Raw: $_capturedMax)'),
           backgroundColor: Colors.green,
         ),
       );
@@ -125,6 +144,27 @@ class _FlexCalibrationScreenState extends State<FlexCalibrationScreen> {
       return;
     }
     
+    // Validate range for each connected finger (ADC > 100)
+    final List<String> failedFingers = [];
+    final fingerNames = ['Thumb', 'Index', 'Middle', 'Ring', 'Pinky'];
+    for (int i = 0; i < 5; i++) {
+      if (_capturedMin![i] > 100) {
+        final diff = _capturedMin![i] - _capturedMax![i];
+        if (diff < 150) {
+          failedFingers.add(fingerNames[i]);
+        }
+      }
+    }
+    if (failedFingers.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: Calibration range is too small for: ${failedFingers.join(', ')}. Please open your hand fully for step 1 and close it tightly for step 2.'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      return;
+    }
+
     final appState = AppStateScope.of(context);
     final activePatient = appState.activePatient;
     if (activePatient == null) {

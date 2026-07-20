@@ -2,7 +2,7 @@
 #define GLOVE_SENSORS_H
 
 #include <Arduino.h>
-#include "../parameters.h"
+#include "parameters.h"
 
 // Configuration
 const int flexPins[NUM_FINGERS] = {FLEX_PIN_1, FLEX_PIN_2, FLEX_PIN_3, FLEX_PIN_4, FLEX_PIN_5};
@@ -30,14 +30,7 @@ inline float getFsrForceGrams(int raw) {
 }
 #include <Preferences.h>
 extern Preferences preferences;
-inline void setupSensors() {
-    pinMode(CALIBRATION_BUTTON_PIN, INPUT_PULLUP);
-    for (int i = 0; i < NUM_FINGERS; i++) {
-        pinMode(flexPins[i], INPUT);
-    }
-    pinMode(FORCE_PIN, INPUT);
-
-    // Load from NVS Preferences
+inline void loadCalibrationFromNVS() {
     preferences.begin("calib", true); // Read-only mode
     isCalibrated = preferences.getBool("is_cal", false);
     if (isCalibrated) {
@@ -61,6 +54,16 @@ inline void setupSensors() {
         forceMax = 0;
     }
     preferences.end();
+}
+
+inline void setupSensors() {
+    pinMode(CALIBRATION_BUTTON_PIN, INPUT_PULLUP);
+    for (int i = 0; i < NUM_FINGERS; i++) {
+        pinMode(flexPins[i], INPUT);
+    }
+    pinMode(FORCE_PIN, INPUT);
+
+    loadCalibrationFromNVS();
 
     // Initialize smoothed values
     for (int i = 0; i < NUM_FINGERS; i++) {

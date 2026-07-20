@@ -5,7 +5,7 @@
 #include <esp_wifi.h>
 #include "soc/soc.h"
 #include "soc/rtc_cntl_reg.h"
-#include "../parameters.h"
+#include "parameters.h"
 
 #include <Adafruit_NeoPixel.h>
 
@@ -16,7 +16,7 @@ Adafruit_PN532 nfc(SDA_PIN, SCL_PIN);
 HardwareSerial MP3(2);
 
 // --- NEOPIXEL STRIP CONFIGURATION ---
-#define NEOPIXEL_PIN 13 // Change to your physical NeoPixel data GPIO pin
+#define NEOPIXEL_PIN 23 // Change to your physical NeoPixel data GPIO pin
 #define NUM_PIXELS 8    // Change to the number of LEDs in your strip
 
 Adafruit_NeoPixel pixels(NUM_PIXELS, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
@@ -183,7 +183,7 @@ void setupAudio() {
     }
     selectSdCard();
     delay(1200);
-    setVolume(30);
+    setVolume(18);
 }
 
 void playAudioTrack(uint8_t cmd, uint8_t high_arg, uint8_t low_arg) {

@@ -40,8 +40,8 @@ class DirectTelemetryService implements TelemetryService {
     _failureCount = 0;
     _client = http.Client(); // Instantiate persistent client
     
-    // Start polling at ~6.6Hz (150ms) for high responsiveness and stability
-    _pollingTimer = Timer.periodic(const Duration(milliseconds: 150), (timer) async {
+    // Start polling at ~3.3Hz (300ms) for high responsiveness and stability
+    _pollingTimer = Timer.periodic(const Duration(milliseconds: 300), (timer) async {
       if (_isPolling) return; // Prevent overlapping requests
       _isPolling = true;
       await _pollTelemetry();

@@ -7,9 +7,11 @@
 #include <Preferences.h>
 #include <ESPmDNS.h>
 #include "glove_secrets.h"
-#include "../parameters.h"
+#include "parameters.h"
 #include "glove_game.h"
 
+
+extern SessionStopReason lastSessionExitReason;
 
 // Web Server instance on port 80
 extern WebServer server;
@@ -216,6 +218,10 @@ inline void handleTelemetry() {
         timeRemaining = localData.time_remaining;
     }
 
+    String exitReasonStr = "aborted";
+    if (lastSessionExitReason == STOP_REASON_SUCCESS) exitReasonStr = "success";
+    else if (lastSessionExitReason == STOP_REASON_TIMEOUT) exitReasonStr = "timeout";
+
     String json = "{";
     json += "\"calibrated\":" + String(localData.calibrated ? "true" : "false") + ",";
     json += "\"calibrating\":" + String(localData.calibrating ? "true" : "false") + ",";
@@ -224,8 +230,10 @@ inline void handleTelemetry() {
     json += "\"success_count\":" + String(sessionState.successCount) + ",";
     json += "\"failure_count\":" + String(sessionState.failureCount) + ",";
     json += "\"current_cycle\":" + String(sessionState.currentCycle) + ",";
-    json += "\"game_type\":" + String(currentPrescription.gameType) + ",";
+    json += "\"is_holding\":" + String(sessionState.isHolding ? "true" : "false") + ",";
+    json += "\"game_type\":" + String(sessionState.active ? currentPrescription.gameType : 0) + ",";
     json += "\"session_completed_success\":" + String(lastSessionCompletedSuccess ? "true" : "false") + ",";
+    json += "\"exit_reason\":\"" + exitReasonStr + "\",";
     
     // flex group
     json += "\"flex\":{";
@@ -600,10 +608,8 @@ inline void handleActivePrescription() {
     
     if (rx.gameType == GAME_NONE) {
         if (sessionState.active) {
-            stopGameSession(false);
+            stopGameSession(STOP_REASON_ABORTED);
         }
-        currentPrescription = rx;
-        savePrescriptionToNVS(rx);
         server.send(200, "text/plain", "Game stopped");
         return;
     }
@@ -612,9 +618,6 @@ inline void handleActivePrescription() {
     savePrescriptionToNVS(rx); // Persist received prescription!
     Serial.printf("[Rx] Received prescription: type=%d, cycles=%d, timer=%d, diff=%d, holdTime=%d\n",
                   rx.gameType, rx.totalCycles, rx.timerSeconds, rx.difficulty, rx.requiredHoldTimeSeconds);
-    
-    // Save to NVS persistently
-    savePrescriptionToNVS(rx);
     
     String patientId = server.arg("patientId");
     if (patientId.length() > 0) {

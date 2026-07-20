@@ -1,7 +1,7 @@
 #pragma once
 #include <Arduino.h>
 #include <vector>
-#include "../parameters.h"
+#include "parameters.h"
 #include "glove_audio.h"
 #include "glove_haptic.h"
 
@@ -9,6 +9,7 @@
 extern int flexMin[NUM_FINGERS];
 extern int flexMax[NUM_FINGERS];
 extern bool isCalibrated;
+extern SessionStopReason lastSessionExitReason;
 
 
 
@@ -301,6 +302,8 @@ inline void selectNextCubesBoxesTarget() {
 inline void startNewGameSession() {
     if (currentPrescription.gameType == GAME_NONE) return;
 
+    loadCalibrationFromNVS();
+
     // Check if buffer is full (50 sessions) and offline (WiFi not connected)
     if (getBufferedLogCount() >= 50 && WiFi.status() != WL_CONNECTED) {
         Serial.println("[Game] Warning: Local log buffer is FULL (50 sessions) and offline. Circular buffer will overwrite oldest logs.");
@@ -316,6 +319,7 @@ inline void startNewGameSession() {
     sessionState.currentCycle = 0;
     sessionState.successCount = 0;
     lastSessionCompletedSuccess = false;
+    lastSessionExitReason = STOP_REASON_ABORTED;
     sessionState.failureCount = 0;
     sessionState.totalResponseTimeMs = 0;
     sessionState.lastActionTime = millis();
@@ -394,7 +398,6 @@ inline void startNewGameSession() {
                 }
             }
         }
-        
         if (alreadyPlaced) {
             Serial.println("[Game-Pinch] Target cube is already placed. Advancing to Phase 1 immediately.");
             sessionState.currentStepInSequence = 1;
@@ -411,22 +414,35 @@ inline void startNewGameSession() {
             int trackNum = 5 + (holdSec / 5);
             if (trackNum < 6) trackNum = 6;
             if (trackNum > 11) trackNum = 11;
-            delay(3000); // Let start prompt finish
-            playTrack(2, trackNum);
+            
+            sessionState.pendingVoicePrompt = true;
+            sessionState.voicePromptTime = millis() + 3000;
+            sessionState.pendingVoiceFolder = 2;
+            sessionState.pendingVoiceTrack = trackNum;
         } else {
             // Voice: "Place the correct weight in the box"
-            delay(3000); // Let start prompt finish
-            playTrack(2, 5); // 02/005.mp3
+            sessionState.pendingVoicePrompt = true;
+            sessionState.voicePromptTime = millis() + 3000;
+            sessionState.pendingVoiceFolder = 2;
+            sessionState.pendingVoiceTrack = 5; // 02/005.mp3
             Serial.println("[Game-Pinch] Phase 0: Waiting for cube placement in box.");
         }
+    } else if (currentPrescription.gameType == GAME_BEND) {
+        // Schedule release/straighten prompt (4, 8) after 3000ms (so start prompt finishes)
+        sessionState.pendingVoicePrompt = true;
+        sessionState.voicePromptTime = millis() + 3000;
+        sessionState.pendingVoiceFolder = 4;
+        sessionState.pendingVoiceTrack = 8;
+        Serial.println("[Game-Bend] Starting Bend game. Phase 0: Waiting for straight hand.");
     }
 }
 
 // Stop game session helper
-inline void stopGameSession(bool completedSuccessfully) {
+inline void stopGameSession(SessionStopReason reason) {
     if (!sessionState.active) return;
     sessionState.active = false;
-    lastSessionCompletedSuccess = completedSuccessfully;
+    lastSessionCompletedSuccess = (reason == STOP_REASON_SUCCESS);
+    lastSessionExitReason = reason;
     
     Serial.println("[Game] Session finished.");
     
@@ -437,7 +453,7 @@ inline void stopGameSession(bool completedSuccessfully) {
     }
     
     // Play end prompt
-    if (completedSuccessfully) {
+    if (reason == STOP_REASON_SUCCESS) {
         if (currentPrescription.gameType == GAME_CUBES_BOXES) {
             playCubesBoxesSuccess();
             delay(1500);
@@ -456,8 +472,12 @@ inline void stopGameSession(bool completedSuccessfully) {
             playCompletionSound();
         }
         sendSuccessFlashToBoxes();
+    } else if (reason == STOP_REASON_TIMEOUT) {
+        playTimeoutSound(); // Speaks "תם הזמן!" (Time is up!)
+        sendFailureBlinkToBoxes();
     } else {
-        playTimeoutSound();
+        // STOP_REASON_ABORTED (aborted manually by user, play failure beep instead of "תם הזמן")
+        playFailureSound();
         sendFailureBlinkToBoxes();
     }
     
@@ -617,6 +637,13 @@ inline void handleLocalNfcEvent(String cubeId, int boxIndex, bool isPlaced, cons
         }
     }
     else if (currentPrescription.gameType == GAME_PINCH) {
+        if (isMacZero(sessionState.targetBoxMac)) {
+            memcpy(sessionState.targetBoxMac, boxMac, 6);
+            Serial.print("[Game-Pinch] Dynamic target box bind: ");
+            printMac_game(sessionState.targetBoxMac);
+            Serial.println();
+        }
+        
         if (memcmp(boxMac, sessionState.targetBoxMac, 6) != 0) return;
         
         // Phase 0: Waiting for cube placement
@@ -650,15 +677,26 @@ inline void handleLocalNfcEvent(String cubeId, int boxIndex, bool isPlaced, cons
         // Phase 1: Cube is in box, waiting for lift
         else if (sessionState.currentStepInSequence == 1) {
             if (!isPlaced) {
-                // Cube lifted — start hold timer (Phase 2)
-                Serial.println("[Game-Pinch] Cube lifted! Phase 2: Hold timer started.");
-                sessionState.currentStepInSequence = 2;
-                sessionState.isHolding = true;
-                sessionState.holdStartTime = millis();
+                int currentForceRaw = 0;
+                if (xSemaphoreTake(telemetryMutex, 0) == pdTRUE) {
+                    currentForceRaw = sharedTelemetry.forceRaw;
+                    xSemaphoreGive(telemetryMutex);
+                }
+                float forceGrams = getFsrForceGrams(currentForceRaw);
                 
-                // Turn off box LED while holding
-                sendLedColorToBox(sessionState.targetBoxMac, 0, 0, 0);
-                triggerHapticClick();
+                if (forceGrams >= 50.0f) {
+                    // Cube lifted — start hold timer (Phase 2)
+                    Serial.println("[Game-Pinch] Cube lifted! Phase 2: Hold timer started.");
+                    sessionState.currentStepInSequence = 2;
+                    sessionState.isHolding = true;
+                    sessionState.holdStartTime = millis();
+                    
+                    // Turn off box LED while holding
+                    sendLedColorToBox(sessionState.targetBoxMac, 0, 0, 0);
+                    triggerHapticClick();
+                } else {
+                    Serial.printf("[Game-Pinch] Cube left event ignored (FSR force is %.1fg, too low). Using FSR to debounce NFC drop.\n", forceGrams);
+                }
             }
         }
         // Phase 2: Cube is lifted, hold timer running
@@ -704,6 +742,109 @@ inline void updateGame() {
 
     if (!sessionState.active) return;
 
+    // Pinch game auto-advance from Phase 0 to Phase 1 if cube is already in the box
+    if (currentPrescription.gameType == GAME_PINCH && sessionState.currentStepInSequence == 0) {
+        bool cubeDetected = false;
+        {
+            RegistryLock lock;
+            for (const auto& pair : boxRegistry) {
+                const RegisteredBox& box = pair.second;
+                bool isTarget = false;
+                if (isMacZero(sessionState.targetBoxMac)) {
+                    isTarget = true; // Auto-bind first active box
+                } else {
+                    isTarget = (memcmp(box.mac, sessionState.targetBoxMac, 6) == 0);
+                }
+                
+                if (isTarget && box.current_cube_len > 0) {
+                    // Verify correct cube
+                    String rxTargetUid = "";
+                    for (int j = 0; j < sessionState.targetCube.uid_len; j++) {
+                        char hex[3];
+                        sprintf(hex, "%02X", sessionState.targetCube.uid[j]);
+                        rxTargetUid += hex;
+                    }
+                    
+                    String boxCubeUid = "";
+                    for (int j = 0; j < box.current_cube_len; j++) {
+                        char hex[3];
+                        sprintf(hex, "%02X", box.current_cube_uid[j]);
+                        boxCubeUid += hex;
+                    }
+                    
+                    if (rxTargetUid.length() == 0 || rxTargetUid == boxCubeUid) {
+                        if (isMacZero(sessionState.targetBoxMac)) {
+                            memcpy(sessionState.targetBoxMac, box.mac, 6);
+                        }
+                        cubeDetected = true;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        if (cubeDetected) {
+            Serial.println("[Game-Pinch] Target cube detected in box during updateGame. Auto-advancing to Phase 1.");
+            sessionState.currentStepInSequence = 1;
+            
+            // Light box in target color
+            uint8_t r, g, b;
+            colorToRgb(sessionState.targetCube.color, r, g, b);
+            sendLedColorToBox(sessionState.targetBoxMac, r, g, b);
+            
+            // Schedule the lift prompt
+            int holdSec = currentPrescription.requiredHoldTimeSeconds;
+            int trackNum = 5 + (holdSec / 5);
+            if (trackNum < 6) trackNum = 6;
+            if (trackNum > 11) trackNum = 11;
+            
+            sessionState.pendingVoicePrompt = true;
+            sessionState.voicePromptTime = millis() + 1000; // Play in 1s
+            sessionState.pendingVoiceFolder = 2;
+            sessionState.pendingVoiceTrack = trackNum;
+        }
+    }
+
+    // Continuous check for Pinch Grip lift transition (Phase 1 -> Phase 2)
+    if (currentPrescription.gameType == GAME_PINCH && sessionState.currentStepInSequence == 1) {
+        bool cubeNotInBox = false;
+        if (!isMacZero(sessionState.targetBoxMac)) {
+            uint64_t key = 0;
+            for (int k = 0; k < 6; k++) {
+                key = (key << 8) | sessionState.targetBoxMac[k];
+            }
+            RegistryLock lock;
+            auto it = boxRegistry.find(key);
+            if (it != boxRegistry.end()) {
+                if (it->second.current_cube_len == 0) {
+                    cubeNotInBox = true;
+                }
+            } else {
+                cubeNotInBox = true;
+            }
+        } else {
+            cubeNotInBox = true;
+        }
+
+        if (cubeNotInBox) {
+            int currentForceRaw = 0;
+            if (xSemaphoreTake(telemetryMutex, 0) == pdTRUE) {
+                currentForceRaw = sharedTelemetry.forceRaw;
+                xSemaphoreGive(telemetryMutex);
+            }
+            float forceGrams = getFsrForceGrams(currentForceRaw);
+            if (forceGrams >= 50.0f) {
+                Serial.printf("[Game-Pinch] Continuous FSR check detected lift (Force: %.1fg). Phase 2: Start hold.\n", forceGrams);
+                sessionState.currentStepInSequence = 2;
+                sessionState.isHolding = true;
+                sessionState.holdStartTime = millis();
+                
+                sendLedColorToBox(sessionState.targetBoxMac, 0, 0, 0);
+                triggerHapticClick();
+            }
+        }
+    }
+
     // Non-blocking animation states
     if (sessionState.waitingForNextTarget && now >= sessionState.nextTargetTime) {
         sessionState.waitingForNextTarget = false;
@@ -711,7 +852,7 @@ inline void updateGame() {
         if (currentPrescription.gameType == GAME_CUBES_BOXES) {
             sendLedColorToBox(sessionState.lastSuccessBoxMac, 0, 0, 0); // Turn off success white LED
             if (sessionState.currentCycle >= currentPrescription.totalCycles) {
-                stopGameSession(true);
+                stopGameSession(STOP_REASON_SUCCESS);
             } else {
                 selectNextCubesBoxesTarget();
             }
@@ -766,7 +907,7 @@ inline void updateGame() {
     // 1. Check timer expiration (only if timerSeconds is defined > 0)
     if (currentPrescription.timerSeconds > 0 && now >= sessionState.timerEndMillis) {
         Serial.println("[Game] Session timeout!");
-        stopGameSession(false); // Fail due to timeout
+        stopGameSession(STOP_REASON_TIMEOUT); // Fail due to timeout
         return;
     }
     
@@ -800,7 +941,7 @@ inline void updateGame() {
                 sendSuccessFlashToBoxes();
                 
                 if (sessionState.currentCycle >= currentPrescription.totalCycles) {
-                    stopGameSession(true);
+                    stopGameSession(STOP_REASON_SUCCESS);
                 } else {
                     // Next cycle: go back to Phase 0 (waiting for placement)
                     sessionState.currentStepInSequence = 0;
@@ -821,30 +962,43 @@ inline void updateGame() {
         }
     }
     else if (currentPrescription.gameType == GAME_BEND) {
-        int maxFlexPct = 0;
-        if (xSemaphoreTake(telemetryMutex, 0) == pdTRUE) {
+        int activeFingerIdx = 0; // Default to Thumb (0)
+        if (currentPrescription.sequenceCount > 0) {
+            int fingerVal = currentPrescription.sequence[sessionState.currentCycle % currentPrescription.sequenceCount];
+            if (fingerVal >= 1 && fingerVal <= 5) {
+                activeFingerIdx = fingerVal - 1;
+            }
+        } else {
+            // Find first active finger from activeFingers array
             for (int i = 0; i < NUM_FINGERS; i++) {
-                if (sharedTelemetry.flexPercent[i] > maxFlexPct) {
-                    maxFlexPct = sharedTelemetry.flexPercent[i];
+                if (currentPrescription.activeFingers[i] == 1) {
+                    activeFingerIdx = i;
+                    break;
                 }
             }
+        }
+        
+        int flexPct = 0;
+        if (xSemaphoreTake(telemetryMutex, 0) == pdTRUE) {
+            flexPct = sharedTelemetry.flexPercent[activeFingerIdx];
             xSemaphoreGive(telemetryMutex);
         }
         
-        int targetRom = currentPrescription.requiredRom[0];
+        int targetRom = currentPrescription.requiredRom[activeFingerIdx];
+        if (targetRom <= 0) targetRom = 50; // Fallback to 50% if ROM not set
         
-        // Phase 0: Waiting for release (straight hand, flex < 20%)
+        // Phase 0: Waiting for release (active finger flex < 20%)
         if (sessionState.currentStepInSequence == 0) {
-            if (maxFlexPct < 20) {
-                Serial.println("[Game-Bend] Hand straight. Phase 1: Prompting bend.");
+            if (flexPct < 20) {
+                Serial.printf("[Game-Bend] Active finger %d straight. Phase 1: Prompting bend.\n", activeFingerIdx + 1);
                 sessionState.currentStepInSequence = 1;
                 playTrack(3, 2); // "כופף את האצבע והחזק אותה מכופפת"
             }
         }
-        // Phase 1: Waiting for bend (flex >= targetRom)
+        // Phase 1: Waiting for bend (active finger flex >= targetRom)
         else if (sessionState.currentStepInSequence == 1) {
-            if (maxFlexPct >= targetRom) {
-                Serial.println("[Game-Bend] ROM target reached! Phase 2: Start hold.");
+            if (flexPct >= targetRom) {
+                Serial.printf("[Game-Bend] Active finger %d ROM target reached (%d%%)! Phase 2: Start hold.\n", activeFingerIdx + 1, targetRom);
                 sessionState.currentStepInSequence = 2;
                 sessionState.isHolding = true;
                 sessionState.holdStartTime = now;
@@ -853,11 +1007,11 @@ inline void updateGame() {
         }
         // Phase 2: Holding
         else if (sessionState.currentStepInSequence == 2) {
-            if (maxFlexPct >= targetRom) {
+            if (flexPct >= targetRom) {
                 triggerHapticContinuous();
                 
-                if (maxFlexPct > sessionState.maxBendRom) {
-                    sessionState.maxBendRom = maxFlexPct;
+                if (flexPct > sessionState.maxBendRom) {
+                    sessionState.maxBendRom = flexPct;
                 }
                 
                 // Check hold duration
@@ -871,7 +1025,7 @@ inline void updateGame() {
                     sessionState.currentCycle++;
                     
                     if (sessionState.currentCycle >= currentPrescription.totalCycles) {
-                        stopGameSession(true);
+                        stopGameSession(STOP_REASON_SUCCESS);
                     } else {
                         // Go back to Phase 0 (waiting for release)
                         sessionState.currentStepInSequence = 0;

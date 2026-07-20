@@ -41,7 +41,9 @@ class MockPatientRepository implements PatientRepository {
       GameType.bend: const BendPrescription(
         cycles: 10,
         holdDurationSeconds: 5,
-        targetRomPercent: 70,
+        activeFingers: [true, true, true, true, true],
+        sequence: [1, 2, 3, 4, 5],
+        fingerRomTargets: [70, 70, 70, 70, 70],
       ),
     };
   }

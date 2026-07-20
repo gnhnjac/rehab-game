@@ -43,7 +43,7 @@ class _FsrCalibrationScreenState extends State<FsrCalibrationScreen> {
   }
 
   void _startSlowPoll() {
-    _pollTimer = Timer.periodic(const Duration(milliseconds: 1500), (_) async {
+    _pollTimer = Timer.periodic(const Duration(milliseconds: 300), (_) async {
       try {
         final raw = await _api.fetchRawSensors();
         if (mounted) {
@@ -119,6 +119,15 @@ class _FsrCalibrationScreenState extends State<FsrCalibrationScreen> {
     if (_capturedMax! >= _capturedMin!) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Error: Maximum squeeze raw value must be lower than the rest value (FSR raw values decrease under pressure).')),
+      );
+      return;
+    }
+    if ((_capturedMin! - _capturedMax!) < 150) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Error: Calibration range is too small (difference must be at least 150). Please squeeze the sensor firmly during step 2.'),
+          backgroundColor: Colors.redAccent,
+        ),
       );
       return;
     }
