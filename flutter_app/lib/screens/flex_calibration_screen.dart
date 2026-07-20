@@ -149,8 +149,7 @@ class _FlexCalibrationScreenState extends State<FlexCalibrationScreen> {
     final fingerNames = ['Thumb', 'Index', 'Middle', 'Ring', 'Pinky'];
     for (int i = 0; i < 5; i++) {
       if (_capturedMin![i] > 100) {
-        final diff = _capturedMin![i] - _capturedMax![i];
-        if (diff <= 0) {
+        if (_capturedMin![i] == _capturedMax![i]) {
           failedFingers.add(fingerNames[i]);
         }
       }
@@ -158,7 +157,7 @@ class _FlexCalibrationScreenState extends State<FlexCalibrationScreen> {
     if (failedFingers.isNotEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Error: Closed hand value must be lower than open hand value for: ${failedFingers.join(', ')}.'),
+          content: Text('Error: Open and closed hand values cannot be equal for: ${failedFingers.join(', ')}.'),
           backgroundColor: Colors.redAccent,
         ),
       );
