@@ -122,15 +122,7 @@ class _FsrCalibrationScreenState extends State<FsrCalibrationScreen> {
       );
       return;
     }
-    if ((_capturedMin! - _capturedMax!) < 150) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Error: Calibration range is too small (difference must be at least 150). Please squeeze the sensor firmly during step 2.'),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
-      return;
-    }
+
 
     final appState = AppStateScope.of(context);
     final activePatient = appState.activePatient;

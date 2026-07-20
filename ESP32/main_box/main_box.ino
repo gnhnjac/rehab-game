@@ -17,12 +17,12 @@ HardwareSerial MP3(2);
 
 // --- NEOPIXEL STRIP CONFIGURATION ---
 #define NEOPIXEL_PIN 23 // Change to your physical NeoPixel data GPIO pin
-#define NUM_PIXELS 8    // Change to the number of LEDs in your strip
+#define NUM_PIXELS 3    // Change to the number of LEDs in your strip
 
 Adafruit_NeoPixel pixels(NUM_PIXELS, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
 
 // --- PHYSICAL BUTTON PIN CONFIGURATION ---
-#define BUTTON_PIN 4
+#define BUTTON_PIN 12
 
 
 // State variables
@@ -183,7 +183,7 @@ void setupAudio() {
     }
     selectSdCard();
     delay(1200);
-    setVolume(18);
+    setVolume(25);
 }
 
 void playAudioTrack(uint8_t cmd, uint8_t high_arg, uint8_t low_arg) {
