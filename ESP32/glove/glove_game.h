@@ -312,7 +312,6 @@ inline void startNewGameSession() {
     Serial.printf("[Game] Starting Game Session. Type: %d, Timer: %ds, Cycles: %d\n", 
                   currentPrescription.gameType, currentPrescription.timerSeconds, currentPrescription.totalCycles);
     
-    sessionState.active = true;
     sessionState.startTime = millis();
     sessionState.timerEndMillis = millis() + currentPrescription.timerSeconds * 1000;
     sessionState.lastCountdownTime = millis();
@@ -438,6 +437,9 @@ inline void startNewGameSession() {
         sessionState.pendingVoiceTrack = 8;
         Serial.println("[Game-Bend] Starting Bend game. Phase 0: Waiting for straight hand.");
     }
+    
+    // Set active last to avoid race conditions with updateGame in loop()
+    sessionState.active = true;
 }
 
 // Stop game session helper
