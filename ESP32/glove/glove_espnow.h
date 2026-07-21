@@ -59,7 +59,6 @@ inline void OnDataRecv(const esp_now_recv_info_t * recvInfo, const uint8_t *inco
 #else
 inline void OnDataRecv(const uint8_t * incoming_mac, const uint8_t *incomingData, int len) {
 #endif
-    if (isAPMode) return; // Ignore ESP-NOW communications in AP / configuration mode
     if (len < sizeof(AppMessage)) {
         Serial.println("Warning: Received packet too small!");
         return;
