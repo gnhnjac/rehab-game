@@ -6,6 +6,7 @@
 #include <DNSServer.h>
 #include <Preferences.h>
 #include <ESPmDNS.h>
+#include <esp_wifi.h>
 #include "glove_secrets.h"
 #include "../parameters.h"
 #include "glove_game.h"
@@ -745,7 +746,8 @@ inline void setupNetwork() {
         scanNetworks();
         
         WiFi.mode(WIFI_AP_STA);
-        WiFi.softAP("Rehab-Glove-Config");
+        WiFi.softAP("Rehab-Glove-Config", "", 1); // Lock softAP to channel 1
+        esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE); // Force physical radio to channel 1
         
         IPAddress apIP(192, 168, 4, 1);
         dnsServer.start(53, "*", apIP); // DNS Captive Portal redirection
