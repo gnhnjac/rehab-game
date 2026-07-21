@@ -42,84 +42,15 @@ inline void sendDfPlayerCmd(uint8_t cmd, uint8_t high_arg, uint8_t low_arg) {
     esp_now_send(mainBoxMac, (uint8_t *)&msg, sizeof(msg));
 }
 
-// Audio Queue Data Structure & Methods to prevent audio files from interrupting each other
-struct AudioQueueItem {
-    uint8_t folder;
-    uint8_t track;
-    uint16_t durationMs;
-};
-
-#define AUDIO_QUEUE_CAPACITY 16
-static AudioQueueItem audioQueue[AUDIO_QUEUE_CAPACITY];
-static int audioQueueHead = 0;
-static int audioQueueTail = 0;
-static unsigned long currentAudioEndTime = 0;
-static bool isAudioPlaying = false;
-
-inline uint16_t getTrackDurationMs(uint8_t folder, uint8_t track) {
-    if (folder == 4) {
-        if (track == 3) return 400; // Short countdown beep
-        if (track == 1 || track == 2 || track == 14 || track == 15) return 800; // Success/fail chimes
-        if (track == 6 || track == 12) return 1500; // Warnings / connect chime
-        if (track == 7) return 2000; // Hold prompt
-        return 2500; // Verbal prompts (8, 4, 5, 16, 17, 18)
-    }
-    // Folders 1, 2, 3 are long verbal intro / instruction prompts
-    return 3500;
-}
-
-inline void queueAudioTrack(uint8_t folder, uint8_t track) {
-    int nextTail = (audioQueueTail + 1) % AUDIO_QUEUE_CAPACITY;
-    if (nextTail == audioQueueHead) {
-        Serial.println("[AudioQueue] Warning: Queue full! Overwriting oldest pending audio.");
-        audioQueueHead = (audioQueueHead + 1) % AUDIO_QUEUE_CAPACITY;
-    }
-    audioQueue[audioQueueTail].folder = folder;
-    audioQueue[audioQueueTail].track = track;
-    audioQueue[audioQueueTail].durationMs = getTrackDurationMs(folder, track);
-    audioQueueTail = nextTail;
-}
-
-inline void clearAudioQueue() {
-    audioQueueHead = 0;
-    audioQueueTail = 0;
-    isAudioPlaying = false;
-    currentAudioEndTime = 0;
-}
-
-inline void updateAudioQueue() {
-    unsigned long now = millis();
-
-    // Wait if current track is still playing
-    if (isAudioPlaying) {
-        if (now < currentAudioEndTime) {
-            return;
-        }
-        isAudioPlaying = false;
-    }
-
-    // Process next item in queue
-    if (audioQueueHead != audioQueueTail) {
-        AudioQueueItem item = audioQueue[audioQueueHead];
-        audioQueueHead = (audioQueueHead + 1) % AUDIO_QUEUE_CAPACITY;
-
-        sendDfPlayerCmd(0x0F, item.folder, item.track);
-        isAudioPlaying = true;
-        currentAudioEndTime = now + item.durationMs;
-        Serial.printf("[AudioQueue] Playing queued track: Folder %d, Track %d (%dms)\n", 
-                      item.folder, item.track, item.durationMs);
-    }
-}
-
 // Set volume between 0 and 30
 inline void setVolume(uint8_t vol) {
     if (vol > 30) vol = 30;
     sendDfPlayerCmd(0x06, 0x00, vol);
 }
 
-// Play track F_xx.mp3 in folder F (1-99) via queue
+// Play track F_xx.mp3 in folder F (1-99)
 inline void playTrack(uint8_t folder, uint8_t track) {
-    queueAudioTrack(folder, track);
+    sendDfPlayerCmd(0x0F, folder, track);
 }
 
 // Feedback and countdown sound wrappers
