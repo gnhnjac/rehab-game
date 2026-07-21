@@ -745,7 +745,7 @@ inline void setupNetwork() {
         // Scan networks for config portal selection
         scanNetworks();
         
-        WiFi.mode(WIFI_AP_STA);
+        WiFi.mode(WIFI_AP);
         WiFi.softAP("Rehab-Glove-Config", "", 1); // Lock softAP to channel 1
         esp_wifi_set_channel(1, WIFI_SECOND_CHAN_NONE); // Force physical radio to channel 1
         
