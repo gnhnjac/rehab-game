@@ -915,7 +915,7 @@ inline void updateGame() {
         bool isPinchHold = (currentPrescription.gameType == GAME_PINCH && sessionState.currentStepInSequence == 2 && sessionState.isHolding);
         bool isCubesCarry = (currentPrescription.gameType == GAME_CUBES_BOXES && (sessionState.isHolding || forceGrams >= 100.0));
         
-        if (isPinchHold || isCubesCarry) {
+        if ((isPinchHold || isCubesCarry) && forceGrams > 10.0f) {
             sessionState.sumSteadyForce += forceGrams;
             sessionState.countSteadyForce++;
         }
