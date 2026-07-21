@@ -348,14 +348,21 @@ void sendButtonPressEvent(bool isLongPress) {
 
 void checkButton() {
     static bool lastButtonState = HIGH;
-    static unsigned long lastDebounceTime = 0;
+    static unsigned long buttonLowStartTime = 0;
+    static bool buttonEventTriggered = false;
+
     bool currentButtonState = digitalRead(BUTTON_PIN);
-    if (currentButtonState == LOW && lastButtonState == HIGH) {
-        unsigned long now = millis();
-        if (now - lastDebounceTime > 250) { // 250ms debounce
-            lastDebounceTime = now;
-            sendButtonPressEvent(false); // Trigger start/stop immediately
+
+    if (currentButtonState == LOW) {
+        if (lastButtonState == HIGH) {
+            buttonLowStartTime = millis();
+            buttonEventTriggered = false;
+        } else if (!buttonEventTriggered && (millis() - buttonLowStartTime >= 80)) { // Must be LOW for 80ms solid (filters electrical noise)
+            buttonEventTriggered = true;
+            sendButtonPressEvent(false); // Trigger start/stop
         }
+    } else {
+        buttonEventTriggered = false;
     }
     lastButtonState = currentButtonState;
 }
