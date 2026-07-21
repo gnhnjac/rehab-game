@@ -104,6 +104,7 @@ void setup() {
     Serial.println("[Glove] Central server starting...");
 
     setupNetwork();
+    setupWebServer();
     setupSPIFFS();
     setupSensors();
     setupHaptic();
