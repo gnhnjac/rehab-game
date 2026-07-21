@@ -15,6 +15,13 @@ class GameSession {
   final double avgGripForceGrams; // grip/pinch force
   final double avgRomPercent; // finger range of motion
 
+  // Per-finger ROM
+  final double romThumb;
+  final double romIndex;
+  final double romMiddle;
+  final double romRing;
+  final double romPinky;
+
   const GameSession({
     required this.id,
     required this.patientId,
@@ -25,6 +32,11 @@ class GameSession {
     required this.avgResponseTimeMs,
     required this.avgGripForceGrams,
     required this.avgRomPercent,
+    required this.romThumb,
+    required this.romIndex,
+    required this.romMiddle,
+    required this.romRing,
+    required this.romPinky,
   });
 
   double get successRate => totalCycles == 0 ? 0 : successCount / totalCycles;
@@ -67,6 +79,11 @@ class GameSession {
       avgResponseTimeMs: (metrics['avgResponseTimeMs'] as num?)?.toDouble() ?? 0,
       avgGripForceGrams: (metrics['avgGripForceGrams'] as num?)?.toDouble() ?? 0,
       avgRomPercent: (metrics['avgRomPercent'] as num?)?.toDouble() ?? 0,
+      romThumb: (metrics['romThumb'] as num?)?.toDouble() ?? 0,
+      romIndex: (metrics['romIndex'] as num?)?.toDouble() ?? 0,
+      romMiddle: (metrics['romMiddle'] as num?)?.toDouble() ?? 0,
+      romRing: (metrics['romRing'] as num?)?.toDouble() ?? 0,
+      romPinky: (metrics['romPinky'] as num?)?.toDouble() ?? 0,
     );
   }
 }

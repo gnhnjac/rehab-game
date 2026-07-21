@@ -330,6 +330,9 @@ inline void startNewGameSession() {
     sessionState.sumSteadyForce = 0;
     sessionState.countSteadyForce = 0;
     sessionState.maxBendRom = 0;
+    for (int i = 0; i < NUM_FINGERS; i++) {
+        sessionState.maxRomPerFinger[i] = 0;
+    }
     sessionState.sumHoldRom = 0;
     sessionState.played10sPrompt = false;
     sessionState.played5sPrompt = false;
@@ -741,6 +744,16 @@ inline void updateGame() {
     }
 
     if (!sessionState.active) return;
+
+    // Track maximum ROM achieved per finger during the active session
+    if (xSemaphoreTake(telemetryMutex, 0) == pdTRUE) {
+        for (int i = 0; i < NUM_FINGERS; i++) {
+            if (sharedTelemetry.flexPercent[i] > sessionState.maxRomPerFinger[i]) {
+                sessionState.maxRomPerFinger[i] = sharedTelemetry.flexPercent[i];
+            }
+        }
+        xSemaphoreGive(telemetryMutex);
+    }
 
     // Pinch game auto-advance from Phase 0 to Phase 1 if cube is already in the box
     if (currentPrescription.gameType == GAME_PINCH && sessionState.currentStepInSequence == 0) {

@@ -178,6 +178,7 @@ struct GameSessionState {
     float sumSteadyForce = 0;
     int countSteadyForce = 0;
     float maxBendRom = 0;
+    float maxRomPerFinger[NUM_FINGERS] = {0}; // Track max ROM achieved per finger
     float sumHoldRom = 0;
     int countHoldRom = 0;
     

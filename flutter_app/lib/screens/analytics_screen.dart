@@ -22,6 +22,7 @@ class AnalyticsScreen extends StatefulWidget {
 
 class _AnalyticsScreenState extends State<AnalyticsScreen> {
   late Future<List<GameSession>> _future;
+  String _selectedFinger = 'Average';
 
   @override
   void initState() {
@@ -77,16 +78,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                 (s) => s.avgGripForceGrams,
                 unit: 'g',
               ),
-              _buildChartCard(
-                'Finger ROM',
-                'Average range of motion (flex)',
-                const Color(0xFFF59E0B),
-                sessions,
-                (s) => s.avgRomPercent,
-                unit: '%',
-                minY: 0,
-                maxY: 100,
-              ),
+              _buildFlexRomChartCard(sessions),
             ],
           );
         },
@@ -249,5 +241,155 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildFlexRomChartCard(List<GameSession> sessions) {
+    final color = const Color(0xFFF59E0B);
+    final spots = <FlSpot>[
+      for (var i = 0; i < sessions.length; i++)
+        FlSpot(
+          i.toDouble(),
+          _getFingerRomValue(sessions[i], _selectedFinger),
+        ),
+    ];
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF141722),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+                  const SizedBox(width: 8),
+                  const Text('Finger ROM', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                ],
+              ),
+              DropdownButtonTheme(
+                data: DropdownButtonThemeData(
+                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                ),
+                child: DropdownButton<String>(
+                  value: _selectedFinger,
+                  dropdownColor: const Color(0xFF141722),
+                  underline: const SizedBox(),
+                  icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
+                  items: ['Average', 'Thumb', 'Index', 'Middle', 'Ring', 'Pinky']
+                      .map((f) => DropdownMenuItem(value: f, child: Text(f)))
+                      .toList(),
+                  onChanged: (val) {
+                    if (val != null) {
+                      setState(() => _selectedFinger = val);
+                    }
+                  },
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Padding(
+            padding: const EdgeInsets.only(left: 18),
+            child: Text('Range of motion (flex) progress', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            height: 160,
+            child: LineChart(
+              LineChartData(
+                minY: 0,
+                maxY: 100,
+                gridData: FlGridData(
+                  show: true,
+                  drawVerticalLine: false,
+                  getDrawingHorizontalLine: (_) =>
+                      const FlLine(color: Color(0xFF232A3D), strokeWidth: 1),
+                ),
+                titlesData: FlTitlesData(
+                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      interval: (sessions.length / 4).ceilToDouble().clamp(1, double.infinity),
+                      getTitlesWidget: (value, meta) {
+                        final i = value.toInt();
+                        if (i < 0 || i >= sessions.length) return const SizedBox.shrink();
+                        final d = sessions[i].timestamp;
+                        return Padding(
+                          padding: const EdgeInsets.only(top: 6),
+                          child: Text('${d.month}/${d.day}',
+                              style: const TextStyle(color: Colors.grey, fontSize: 10)),
+                        );
+                      },
+                    ),
+                  ),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 40,
+                      getTitlesWidget: (value, meta) => Text(
+                        value.toInt().toString(),
+                        style: const TextStyle(color: Colors.grey, fontSize: 10),
+                      ),
+                    ),
+                  ),
+                ),
+                borderData: FlBorderData(show: false),
+                lineBarsData: [
+                  LineChartBarData(
+                    spots: spots,
+                    isCurved: true,
+                    color: color,
+                    barWidth: 3,
+                    dotData: FlDotData(
+                      show: true,
+                      getDotPainter: (spot, percent, bar, index) =>
+                          FlDotCirclePainter(radius: 3, color: color, strokeWidth: 0),
+                    ),
+                    belowBarData: BarAreaData(show: true, color: color.withOpacity(0.12)),
+                  ),
+                ],
+                lineTouchData: LineTouchData(
+                  touchTooltipData: LineTouchTooltipData(
+                    getTooltipItems: (spots) => spots
+                        .map((s) => LineTooltipItem(
+                              '${s.y.toStringAsFixed(1)}%',
+                              const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                            ))
+                        .toList(),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  double _getFingerRomValue(GameSession s, String finger) {
+    switch (finger) {
+      case 'Thumb':
+        return s.romThumb;
+      case 'Index':
+        return s.romIndex;
+      case 'Middle':
+        return s.romMiddle;
+      case 'Ring':
+        return s.romRing;
+      case 'Pinky':
+        return s.romPinky;
+      default:
+        return s.avgRomPercent;
+    }
   }
 }

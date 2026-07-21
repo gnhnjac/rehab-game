@@ -247,15 +247,27 @@ inline void saveSessionResultLocally(int gameType, int successes, int failures, 
     preferences.end();
 
     // 3. Construct the metrics JSON string in Firestore REST format
+    String romThumbVal = String((double)sessionState.maxRomPerFinger[0]);
+    String romIndexVal = String((double)sessionState.maxRomPerFinger[1]);
+    String romMiddleVal = String((double)sessionState.maxRomPerFinger[2]);
+    String romRingVal = String((double)sessionState.maxRomPerFinger[3]);
+    String romPinkyVal = String((double)sessionState.maxRomPerFinger[4]);
+
+    String fingerRomJson = ",\"romThumb\":{\"doubleValue\":" + romThumbVal + "}" +
+                           ",\"romIndex\":{\"doubleValue\":" + romIndexVal + "}" +
+                           ",\"romMiddle\":{\"doubleValue\":" + romMiddleVal + "}" +
+                           ",\"romRing\":{\"doubleValue\":" + romRingVal + "}" +
+                           ",\"romPinky\":{\"doubleValue\":" + romPinkyVal + "}";
+
     String metricsJson = "";
     if (gameType == 1) { // CubesBoxes
-        metricsJson = "{\"avgResponseTimeMs\":{\"doubleValue\":" + String((double)avgRespTimeMs) + "},\"avgGripForceGrams\":{\"doubleValue\":" + String(avgForceOrRom) + "},\"levelCompleted\":{\"integerValue\":\"" + String(successes) + "\"}}";
+        metricsJson = "{\"avgResponseTimeMs\":{\"doubleValue\":" + String((double)avgRespTimeMs) + "},\"avgGripForceGrams\":{\"doubleValue\":" + String(avgForceOrRom) + "},\"levelCompleted\":{\"integerValue\":\"" + String(successes) + "\"}" + fingerRomJson + "}";
     }
     else if (gameType == 2) { // Pinch
-        metricsJson = "{\"avgGripForceGrams\":{\"doubleValue\":" + String(avgForceOrRom) + "},\"avgResponseTimeMs\":{\"doubleValue\":" + String((double)avgRespTimeMs) + "},\"succeeded\":{\"booleanValue\":true}}";
+        metricsJson = "{\"avgGripForceGrams\":{\"doubleValue\":" + String(avgForceOrRom) + "},\"avgResponseTimeMs\":{\"doubleValue\":" + String((double)avgRespTimeMs) + "},\"succeeded\":{\"booleanValue\":true}" + fingerRomJson + "}";
     }
     else if (gameType == 3) { // Bend
-        metricsJson = "{\"avgRomPercent\":{\"doubleValue\":" + String(avgForceOrRom) + "},\"avgResponseTimeMs\":{\"doubleValue\":" + String((double)avgRespTimeMs) + "},\"sequenceCompleted\":{\"booleanValue\":true}}";
+        metricsJson = "{\"avgRomPercent\":{\"doubleValue\":" + String(avgForceOrRom) + "},\"avgResponseTimeMs\":{\"doubleValue\":" + String((double)avgRespTimeMs) + "},\"sequenceCompleted\":{\"booleanValue\":true}" + fingerRomJson + "}";
     } else {
         metricsJson = "{}";
     }

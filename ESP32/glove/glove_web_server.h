@@ -744,7 +744,7 @@ inline void setupNetwork() {
         // Scan networks for config portal selection
         scanNetworks();
         
-        WiFi.mode(WIFI_AP);
+        WiFi.mode(WIFI_AP_STA);
         WiFi.softAP("Rehab-Glove-Config");
         
         IPAddress apIP(192, 168, 4, 1);
