@@ -546,7 +546,7 @@ inline void handleActivePrescription() {
                         newBox.active = false;
                         newBox.current_cube_len = 0;
                         memset(newBox.current_cube_uid, 0, MAX_CUBE_UID_LEN);
-                        newBox.last_seen = 0;
+                        newBox.last_seen = millis();
                         strncpy(newBox.shape, shapeStr.c_str(), sizeof(newBox.shape) - 1);
                         newBox.shape[sizeof(newBox.shape) - 1] = '\0';
                         boxRegistry[key] = newBox;
