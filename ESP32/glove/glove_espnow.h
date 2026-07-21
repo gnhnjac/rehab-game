@@ -3,6 +3,7 @@
 
 #include <esp_now.h>
 #include <WiFi.h>
+#include <esp_wifi.h>
 #include <unordered_map>
 #include "../parameters.h"
 #include "glove_haptic.h"
@@ -361,6 +362,28 @@ inline void setupEspNow() {
     }
 
     esp_now_register_recv_cb(OnDataRecv);
+
+    // Disable Wi-Fi power saving to prevent packet drops due to sleep mode
+    esp_wifi_set_ps(WIFI_PS_NONE);
+    Serial.println("[Glove] Wi-Fi Power Save disabled (WIFI_PS_NONE).");
+
+    // Add broadcast peer for both station and AP interfaces to ensure broadcast reception works in all modes
+    esp_now_peer_info_t peerInfo;
+    memset(&peerInfo, 0, sizeof(peerInfo));
+    uint8_t broadcastMac[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    memcpy(peerInfo.peer_addr, broadcastMac, 6);
+    peerInfo.channel = 0; // Use current channel
+    peerInfo.encrypt = false;
+
+    peerInfo.ifidx = WIFI_IF_STA;
+    if (esp_now_add_peer(&peerInfo) != ESP_OK) {
+        Serial.println("[Glove] Warning: Failed to add broadcast peer to STA interface.");
+    }
+
+    peerInfo.ifidx = WIFI_IF_AP;
+    if (esp_now_add_peer(&peerInfo) != ESP_OK) {
+        Serial.println("[Glove] Warning: Failed to add broadcast peer to AP interface.");
+    }
 }
 
 inline void printRegistry() {
