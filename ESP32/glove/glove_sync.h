@@ -195,6 +195,37 @@ inline void syncBufferedLogs() {
             }
             file.close(); // Close before upload/delete
 
+            // Extract saved epoch from filename (log_<epoch>_<rand>.json)
+            int firstUnderscore = filename.indexOf('_');
+            int secondUnderscore = filename.indexOf('_', firstUnderscore + 1);
+            uint32_t savedEpoch = 0;
+            if (firstUnderscore != -1 && secondUnderscore != -1) {
+                savedEpoch = strtoul(filename.substring(firstUnderscore + 1, secondUnderscore).c_str(), NULL, 10);
+            }
+
+            // If recorded offline (savedEpoch < 1600000000) and we now have real NTP time (nowReal >= 1600000000)
+            uint32_t nowReal = getEpochTime();
+            if (nowReal >= 1600000000 && savedEpoch < 1600000000) {
+                uint32_t nowMillisSec = millis() / 1000;
+                uint32_t realGameEpoch = nowReal;
+                if (nowMillisSec >= savedEpoch) {
+                    uint32_t ageSec = nowMillisSec - savedEpoch;
+                    realGameEpoch = nowReal - ageSec;
+                }
+                String newRfc = formatRfc3339(realGameEpoch);
+                
+                // Replace 1970 timestamp in JSON payload
+                int tsIdx = jsonPayload.indexOf("\"timestamp\":{\"timestampValue\":\"");
+                if (tsIdx != -1) {
+                    int valStart = tsIdx + 31; // Length of "timestamp":{"timestampValue":"
+                    int valEnd = jsonPayload.indexOf('"', valStart);
+                    if (valEnd != -1) {
+                        jsonPayload = jsonPayload.substring(0, valStart) + newRfc + jsonPayload.substring(valEnd);
+                        Serial.printf("[Sync] Adjusted offline timestamp from 1970 to real game time: %s\n", newRfc.c_str());
+                    }
+                }
+            }
+
             // Attempt upload
             if (uploadLogToFirestore(jsonPayload)) {
                 // If successful, delete the local file
