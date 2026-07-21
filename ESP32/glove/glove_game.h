@@ -444,18 +444,20 @@ inline void startNewGameSession() {
 
 // Stop game session helper
 inline void stopGameSession(SessionStopReason reason) {
-    if (!sessionState.active) return;
+    bool wasActive = sessionState.active;
     sessionState.active = false;
     lastSessionCompletedSuccess = (reason == STOP_REASON_SUCCESS);
     lastSessionExitReason = reason;
     
-    Serial.println("[Game] Session finished.");
+    Serial.println("[Game] Session finished. Cleaning up LEDs...");
     
-    // Turn off all box LEDs individually (reliable unicast)
+    // Always turn off all box LEDs individually (reliable unicast)
     for (const auto& pair : boxRegistry) {
         sendLedColorToBox(pair.second.mac, 0, 0, 0);
         delay(10);
     }
+    
+    if (!wasActive) return;
     
     // Play end prompt
     if (reason == STOP_REASON_SUCCESS) {

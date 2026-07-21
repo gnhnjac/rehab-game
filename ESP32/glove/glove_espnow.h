@@ -237,6 +237,8 @@ inline void OnDataRecv(const uint8_t * incoming_mac, const uint8_t *incomingData
                     isMacZero(sessionState.targetBoxMac)) {
                     Serial.println("[ESP-NOW] Target box auto-selected on auto-registration.");
                     selectNextCubesBoxesTarget();
+                } else if (!sessionState.active) {
+                    sendLedColorToBox(incoming_mac, 0, 0, 0);
                 }
             }
         }
