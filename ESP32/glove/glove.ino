@@ -70,8 +70,8 @@ const unsigned long sampleInterval = 20; // Sample sensors at 50Hz (every 20ms)
 // Background network task pinned to Core 0 (handling local HTTP server and offline sync)
 void networkTask(void* parameter) {
     for (;;) {
-        // Sleep for a short duration to yield CPU to other Core 0 system tasks (like Wi-Fi stack)
-        vTaskDelay(pdMS_TO_TICKS(20));
+        // Yield shortly to keep network stack responsive without lag
+        vTaskDelay(pdMS_TO_TICKS(5));
 
         // Handle local HTTP / captive portal requests
         handleNetworkRequests();
@@ -85,9 +85,9 @@ void networkTask(void* parameter) {
                 pendingEvent.isPlaced ? "placed" : "removed");
         }
 
-        // Run sync bridge to upload any buffered offline logs
+        // Run sync bridge to upload any buffered offline logs every 30 seconds
         static unsigned long lastSyncTime = 0;
-        if (millis() - lastSyncTime >= 5000) { // Check sync queue every 5 seconds
+        if (millis() - lastSyncTime >= 30000) {
             lastSyncTime = millis();
             syncBufferedLogs();
         }
