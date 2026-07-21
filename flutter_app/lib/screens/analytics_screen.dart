@@ -274,24 +274,20 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                   const Text('Finger ROM', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
                 ],
               ),
-              DropdownButtonTheme(
-                data: DropdownButtonThemeData(
-                  style: const TextStyle(color: Colors.white, fontSize: 13),
-                ),
-                child: DropdownButton<String>(
-                  value: _selectedFinger,
-                  dropdownColor: const Color(0xFF141722),
-                  underline: const SizedBox(),
-                  icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
-                  items: ['Average', 'Thumb', 'Index', 'Middle', 'Ring', 'Pinky']
-                      .map((f) => DropdownMenuItem(value: f, child: Text(f)))
-                      .toList(),
-                  onChanged: (val) {
-                    if (val != null) {
-                      setState(() => _selectedFinger = val);
-                    }
-                  },
-                ),
+              DropdownButton<String>(
+                value: _selectedFinger,
+                dropdownColor: const Color(0xFF141722),
+                style: const TextStyle(color: Colors.white, fontSize: 13),
+                underline: const SizedBox(),
+                icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
+                items: ['Average', 'Thumb', 'Index', 'Middle', 'Ring', 'Pinky']
+                    .map((f) => DropdownMenuItem(value: f, child: Text(f)))
+                    .toList(),
+                onChanged: (val) {
+                  if (val != null) {
+                    setState(() => _selectedFinger = val);
+                  }
+                },
               ),
             ],
           ),

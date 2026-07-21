@@ -32,11 +32,11 @@ class GameSession {
     required this.avgResponseTimeMs,
     required this.avgGripForceGrams,
     required this.avgRomPercent,
-    required this.romThumb,
-    required this.romIndex,
-    required this.romMiddle,
-    required this.romRing,
-    required this.romPinky,
+    this.romThumb = 0.0,
+    this.romIndex = 0.0,
+    this.romMiddle = 0.0,
+    this.romRing = 0.0,
+    this.romPinky = 0.0,
   });
 
   double get successRate => totalCycles == 0 ? 0 : successCount / totalCycles;
