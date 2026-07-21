@@ -36,6 +36,21 @@ class _FsrCalibrationScreenState extends State<FsrCalibrationScreen> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final activePatient = AppStateScope.of(context).activePatient;
+    if (activePatient != null && _capturedMin == null && _capturedMax == null) {
+      final cal = activePatient.calibration;
+      if (cal.containsKey('fo_min') && cal.containsKey('fo_max')) {
+        setState(() {
+          _capturedMin = (cal['fo_min'] as num).toInt();
+          _capturedMax = (cal['fo_max'] as num).toInt();
+        });
+      }
+    }
+  }
+
+  @override
   void dispose() {
     _pollTimer?.cancel();
     TelemetryProvider.getService().connect(); // Restart background polling
