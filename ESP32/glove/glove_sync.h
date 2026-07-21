@@ -305,6 +305,12 @@ inline void saveSessionResultLocally(int gameType, int successes, int failures, 
 
     // 4. Buffer the log to SPIFFS
     bufferGameSessionLog(patientId, gameTypeStr, successes, successes + failures, metricsJson);
+
+    // 5. If Wi-Fi is connected, trigger sync immediately!
+    if (WiFi.status() == WL_CONNECTED) {
+        Serial.println("[Sync] Wi-Fi connected. Triggering immediate session log upload...");
+        syncBufferedLogs();
+    }
 }
 
 #endif // GLOVE_SYNC_H

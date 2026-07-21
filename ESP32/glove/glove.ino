@@ -84,13 +84,6 @@ void networkTask(void* parameter) {
                 pendingEvent.boxIndex, pendingEvent.cubeId.c_str(),
                 pendingEvent.isPlaced ? "placed" : "removed");
         }
-
-        // Run sync bridge to upload any buffered offline logs every 30 seconds
-        static unsigned long lastSyncTime = 0;
-        if (millis() - lastSyncTime >= 30000) {
-            lastSyncTime = millis();
-            syncBufferedLogs();
-        }
     }
 }
 
