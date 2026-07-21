@@ -676,6 +676,15 @@ inline void handleActivePrescription() {
 }
 
 
+inline void handleClearWifi() {
+    preferences.begin("wifi-config", false);
+    preferences.clear();
+    preferences.end();
+    server.send(200, "text/html", "<html><head><meta http-equiv='refresh' content='3;url=/'></head><body><h2>Saved Wi-Fi credentials cleared!</h2><p>Restarting Glove into config mode in 3 seconds...</p></body></html>");
+    delay(1000);
+    ESP.restart();
+}
+
 inline void setupNetwork() {
     preferences.begin("wifi-config", false);
     String ssid = preferences.getString("ssid", "");
@@ -685,9 +694,15 @@ inline void setupNetwork() {
     Serial.println("[Network] Booting network stack...");
     
     bool connected = false;
+    String defaultSsid = String(WIFI_SSID);
+    bool forceOffline = (defaultSsid == "FORCE_OFFLINE");
+
+    if (forceOffline) {
+        Serial.println("[Network] 'FORCE_OFFLINE' specified in glove_secrets.h. Skipping Wi-Fi connection attempts.");
+    }
     
     // 1. Attempt connection using saved credentials if they exist
-    if (ssid.length() > 0) {
+    if (!forceOffline && ssid.length() > 0) {
         Serial.printf("[Network] Attempting connection to saved Wi-Fi: %s\n", ssid.c_str());
         WiFi.mode(WIFI_STA);
         WiFi.begin(ssid.c_str(), pass.c_str());
@@ -710,8 +725,7 @@ inline void setupNetwork() {
     }
     
     // 2. If saved credentials failed, try default credentials as fallback
-    if (!connected) {
-        String defaultSsid = String(WIFI_SSID);
+    if (!connected && !forceOffline) {
         String defaultPass = String(WIFI_PASSWORD);
         
         if (defaultSsid.length() > 0 && defaultSsid != "YOUR_WIFI_SSID") {
@@ -763,10 +777,19 @@ inline void setupNetwork() {
         configTime(0, 0, "pool.ntp.org", "time.nist.gov");
         Serial.println("[NTP] Initializing background NTP sync on Wi-Fi connection...");
         ntpInitialized = true;
-        
-        // Set up mDNS
+    }
+
+    if (isAPMode) {
+        WiFi.softAPConfig(IPAddress(192, 168, 4, 1), IPAddress(192, 168, 4, 1), IPAddress(255, 255, 255, 0));
+    }
+}
+
+inline void setupWebServer() {
+    if (isAPMode) {
+        server.on("/save", HTTP_POST, handleSave);
+    } else {
         if (MDNS.begin("rehab-glove")) {
-            Serial.println("[Network] mDNS responder started at http://rehab-glove.local");
+            Serial.println("[Network] mDNS responder started: http://rehab-glove.local");
             MDNS.addService("http", "tcp", 80);
         }
         Serial.println("[Network] HTTP Telemetry server running on port 80.");
@@ -775,6 +798,8 @@ inline void setupNetwork() {
     // Register all routes globally for easy switching and Web access
     server.on("/", handleRoot);
     server.on("/save", HTTP_POST, handleSave);
+    server.on("/clear-wifi", HTTP_GET, handleClearWifi);
+    server.on("/forget-wifi", HTTP_GET, handleClearWifi);
     server.on("/api/telemetry", HTTP_GET, handleTelemetry);
     server.on("/api/command", handleCommand);
     server.on("/api/active-prescription", handleActivePrescription);
