@@ -202,7 +202,7 @@ inline void selectNextCubesBoxesTarget() {
         }
         if (it == boxRegistry.end()) it = boxRegistry.begin();
         
-        // Pick random cube
+        // Pick cube
         RxCube candidateCube;
         if (currentPrescription.cubesCount > 0) {
             if (currentPrescription.difficulty == 3) {
@@ -220,7 +220,11 @@ inline void selectNextCubesBoxesTarget() {
                     randCubeIdx = random(0, currentPrescription.cubesCount);
                     candidateCube = currentPrescription.cubes[randCubeIdx];
                 }
+            } else if (currentPrescription.difficulty == 1) {
+                // Difficulty 1: Constant target cube / color
+                candidateCube = currentPrescription.cubes[0];
             } else {
+                // Difficulty 2: Random target cube / color
                 randCubeIdx = random(0, currentPrescription.cubesCount);
                 candidateCube = currentPrescription.cubes[randCubeIdx];
             }
@@ -234,7 +238,7 @@ inline void selectNextCubesBoxesTarget() {
         bool isSameBox = (memcmp(it->second.mac, prevBoxMac, 6) == 0);
         bool isSameColor = (String(candidateCube.color) == prevCubeColor);
         
-        if (totalCombos <= 1 || !(isSameBox && isSameColor)) {
+        if (currentPrescription.difficulty == 1 || totalCombos <= 1 || !(isSameBox && isSameColor)) {
             memcpy(sessionState.targetBoxMac, it->second.mac, 6);
             sessionState.targetCube = candidateCube;
             foundNew = true;
