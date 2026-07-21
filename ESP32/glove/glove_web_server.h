@@ -777,6 +777,9 @@ inline void setupNetwork() {
         configTime(0, 0, "pool.ntp.org", "time.nist.gov");
         Serial.println("[NTP] Initializing background NTP sync on Wi-Fi connection...");
         ntpInitialized = true;
+
+        // Trigger immediate sync of any offline logs buffered previously
+        syncBufferedLogs();
     }
 
     if (isAPMode) {
