@@ -226,4 +226,7 @@ void loop() {
     
     // Update active game logic state machines
     updateGame();
+
+    // Process queued audio prompts sequentially
+    updateAudioQueue();
 }
