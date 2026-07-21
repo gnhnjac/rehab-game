@@ -126,21 +126,28 @@ class _ExerciseControlScreenState extends State<ExerciseControlScreen> {
       final activePatient = AppStateScope.of(context).activePatient;
       final patientActiveCubeUids = activePatient?.activeCubeUids ?? <String>[];
 
-      if (widget.prescription.type == GameType.cubesBoxes) {
-        if (widget.prescription is CubesBoxesPrescription &&
-            (widget.prescription as CubesBoxesPrescription).difficulty == 3) {
-          final enrolledBoxes = BoxRegistry.registry.values.toList();
-          var enrolledCubes = CubeRegistry.registry.values.toList();
-          if (patientActiveCubeUids.isNotEmpty) {
-            enrolledCubes = enrolledCubes.where((c) => patientActiveCubeUids.contains(c.uid)).toList();
-          }
-          
-          if (enrolledBoxes.isEmpty) {
-            _showValidationErrorDialog("No boxes are enrolled in the box registry. Please enroll boxes first.");
-            setState(() => _starting = false);
-            return;
-          }
+      if (widget.prescription.type == GameType.cubesBoxes || widget.prescription.type == GameType.pinch) {
+        final enrolledBoxes = BoxRegistry.registry.values.toList();
+        var enrolledCubes = CubeRegistry.registry.values.toList();
+        if (patientActiveCubeUids.isNotEmpty) {
+          enrolledCubes = enrolledCubes.where((c) => patientActiveCubeUids.contains(c.uid)).toList();
+        }
 
+        if (enrolledBoxes.isEmpty) {
+          _showValidationErrorDialog("No boxes are enrolled in the box registry. Please enroll boxes first.");
+          setState(() => _starting = false);
+          return;
+        }
+
+        if (enrolledCubes.isEmpty) {
+          _showValidationErrorDialog("No active cubes are registered or assigned to this patient. Please activate cubes in the patient profile first.");
+          setState(() => _starting = false);
+          return;
+        }
+
+        if (widget.prescription.type == GameType.cubesBoxes &&
+            widget.prescription is CubesBoxesPrescription &&
+            (widget.prescription as CubesBoxesPrescription).difficulty == 3) {
           List<String> missingShapes = [];
           for (final box in enrolledBoxes) {
             final hasMatchingCube = enrolledCubes.any((cube) =>
@@ -161,8 +168,7 @@ class _ExerciseControlScreenState extends State<ExerciseControlScreen> {
           }
         }
 
-        cubes = CubeRegistry.registry.values
-            .where((c) => patientActiveCubeUids.isEmpty || patientActiveCubeUids.contains(c.uid))
+        cubes = enrolledCubes
             .map((c) => GloveCube(
                   uid: c.uid,
                   color: c.colorHex,
